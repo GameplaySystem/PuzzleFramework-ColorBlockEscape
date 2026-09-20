@@ -1,0 +1,6 @@
+{
+  "name": "ColorBlockEscape.Runtime",
+  "rootNamespace": "ColorBlockEscape.Runtime",
+  "references": ["PuzzleFramework.Runtime"],
+  "autoReferenced": true
+}

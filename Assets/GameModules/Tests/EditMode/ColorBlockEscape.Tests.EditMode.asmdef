@@ -1,0 +1,7 @@
+{
+  "name": "ColorBlockEscape.Tests.EditMode",
+  "rootNamespace": "ColorBlockEscape.Tests",
+  "references": ["ColorBlockEscape.Runtime", "PuzzleFramework.Runtime"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}
