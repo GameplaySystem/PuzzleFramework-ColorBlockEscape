@@ -12,6 +12,9 @@ namespace ColorBlockEscape.Runtime.Authoring
     /// <summary>Dedicated CBE Play-mode scene adapter; framework session and tools own the edits.</summary>
     public sealed class ColorBlockEscapeEditorController : MonoBehaviour
     {
+        [SerializeField, Range(0.01f, 1f)] private float _captureOverlapFraction = 0.70f;
+        [SerializeField, Min(0f)] private float _captureDistanceCells = 0.35f;
+        [SerializeField, Min(0.01f)] private float _exitSpeedCellsPerSecond = 3f;
         private static readonly string[] ToolNames =
         {
             "Place block", "Select / move", "Erase block", "Active cell", "Inactive cell",
@@ -24,6 +27,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         private Camera _camera;
         private GameObject _authoringRoot;
         private GameObject _playRoot;
+        private ColorBlockEscapeRuntimeLevel _playTestLevel;
         private GameObject _previewRoot;
         private string _previewKey;
         private int _toolIndex;
@@ -45,6 +49,7 @@ namespace ColorBlockEscape.Runtime.Authoring
 
         public ColorBlockEscapeAuthoringSession Model => _model;
         public bool IsPlayTesting => _playRoot != null;
+        public ColorBlockEscapeRuntimeLevel PlayTestLevel => _playTestLevel;
 
         private void Awake()
         {
@@ -108,7 +113,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             GUILayout.Label(_message);
             if (IsPlayTesting)
             {
-                GUILayout.Label("Plain block dragging only. Exit capture and outcomes are later checkpoints.");
+                GUILayout.Label("Exit capture is active. Timer outcomes and chipper presentation are later checkpoints.");
                 if (GUILayout.Button("Return to editor")) ReturnFromPlayTest();
                 GUILayout.EndScrollView(); GUILayout.EndArea();
                 return;
@@ -254,13 +259,19 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (IsPlayTesting) return true;
             if (!_model.TryBeginPlayTest(out ColorBlockEscapeRuntimeLevel level, out string failure))
             { _message = failure; return false; }
+            _playTestLevel = level;
             _authoringRoot.SetActive(false);
             ClearPreview();
             _playRoot = new GameObject("CBE isolated play-test");
             _playRoot.transform.SetParent(transform, false);
             Dictionary<string, Transform> views = ColorBlockEscapeAuthoringView.Build(
                 _model, level, _layout, _playRoot.transform);
-            _playRoot.AddComponent<PlainBlockDragAdapter>().Initialize(level, _layout, _camera, views);
+            ExitCaptureSettings settings = new(
+                _captureOverlapFraction > 0f ? _captureOverlapFraction : 0.70f,
+                Mathf.Max(0f, _captureDistanceCells),
+                _exitSpeedCellsPerSecond > 0f ? _exitSpeedCellsPerSecond : 3f);
+            _playRoot.AddComponent<PlainBlockDragAdapter>().Initialize(level, _layout, _camera,
+                views, settings);
             _message = "Play-test running; editor data remains unchanged.";
             return true;
         }
@@ -270,6 +281,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (_playRoot == null) return;
             Destroy(_playRoot);
             _playRoot = null;
+            _playTestLevel = null;
             _authoringRoot.SetActive(true);
             _message = "Returned to the unchanged authoring session.";
         }

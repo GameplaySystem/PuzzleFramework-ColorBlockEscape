@@ -9,22 +9,26 @@ namespace ColorBlockEscape.Runtime
     /// <summary>One on-board drag result. World position is authoritative for the block view.</summary>
     public readonly struct PlainBlockMoveResult
     {
-        public PlainBlockMoveResult(Vector3 worldPosition, bool wasBlocked, string failureReason)
+        public PlainBlockMoveResult(Vector3 worldPosition, bool wasBlocked, string failureReason,
+            bool wasCaptured = false)
         {
             WorldPosition = worldPosition;
             WasBlocked = wasBlocked;
             FailureReason = failureReason ?? string.Empty;
+            WasCaptured = wasCaptured;
         }
 
         public Vector3 WorldPosition { get; }
         public bool WasBlocked { get; }
         public string FailureReason { get; }
+        public bool WasCaptured { get; }
     }
 
     /// <summary>
     /// CBE-owned on-board movement policy. The shared sweep and clearance helpers validate
     /// continuous travel; occupancy changes only when a release reaches a valid snapped pose.
-    /// Exits, outcomes and presentation are deliberately outside this checkpoint.
+    /// An optional game-owned exit capture service may admit a block after the normal swept
+    /// on-board movement. The plain movement fixture leaves that service absent.
     /// </summary>
     public sealed class PlainBlockMovement
     {
@@ -32,13 +36,16 @@ namespace ColorBlockEscape.Runtime
         private readonly GridWorldLayout _layout;
         private readonly SweptFootprintHelper _sweep = new();
         private readonly GridSnapSystem _snap = new();
+        private readonly ColorBlockEscapeExitCapture _exitCapture;
         private BlockRuntimeState _activeBlock;
         private ShapeAwareDragFootprint _activeFootprint;
 
-        public PlainBlockMovement(ColorBlockEscapeRuntimeLevel level, GridWorldLayout layout)
+        public PlainBlockMovement(ColorBlockEscapeRuntimeLevel level, GridWorldLayout layout,
+            ColorBlockEscapeExitCapture exitCapture = null)
         {
             _level = level ?? throw new ArgumentNullException(nameof(level));
             _layout = layout;
+            _exitCapture = exitCapture;
         }
 
         public string ActiveBlockId => _activeBlock?.Id;
@@ -63,6 +70,7 @@ namespace ColorBlockEscape.Runtime
         {
             EnsureActive();
             Vector3 previous = CurrentWorldPosition();
+            Vector2 previousLocal = _activeBlock.ContinuousOrigin;
             Vector2 local = _layout.WorldToBoardLocal(candidateWorldPosition);
             GridBoard board = _level.FrameworkContext.GridBoard;
             Vector2 bounded = new(
@@ -74,7 +82,8 @@ namespace ColorBlockEscape.Runtime
             if (IsPathClear(previous, target, out string failure))
             {
                 _activeBlock.ContinuousOrigin = bounded;
-                return new PlainBlockMoveResult(target, clamped, clamped ? "Board boundary." : string.Empty);
+                return FinishMove(new PlainBlockMoveResult(target, clamped,
+                    clamped ? "Board boundary." : string.Empty), previousLocal, local);
             }
 
             // The sweep is monotonic along this segment: a blocked prefix cannot become
@@ -91,7 +100,20 @@ namespace ColorBlockEscape.Runtime
 
             Vector3 accepted = Vector3.Lerp(previous, target, low);
             _activeBlock.ContinuousOrigin = _layout.WorldToBoardLocal(accepted);
-            return new PlainBlockMoveResult(accepted, true, failure);
+            return FinishMove(new PlainBlockMoveResult(accepted, true, failure), previousLocal, local);
+        }
+
+        private PlainBlockMoveResult FinishMove(PlainBlockMoveResult onBoard,
+            Vector2 previousPose, Vector2 requestedPose)
+        {
+            if (_exitCapture == null) return onBoard;
+            ExitCaptureResult capture = _exitCapture.TryCapture(_activeBlock,
+                previousPose, requestedPose);
+            if (!capture.Captured) return onBoard;
+            _activeBlock = null;
+            _activeFootprint = null;
+            return new PlainBlockMoveResult(capture.AlignedWorldPosition, false,
+                string.Empty, wasCaptured: true);
         }
 
         public PlainBlockMoveResult End()

@@ -18,23 +18,38 @@ namespace ColorBlockEscape.Runtime
         private GridWorldLayout _layout;
         private Camera _camera;
         private PlainBlockMovement _movement;
+        private ColorBlockEscapeExitCapture _exitCapture;
         private Dictionary<string, Transform> _views;
         private PuzzleFramework.Interaction.InputSystem _input;
         private int _activePointerId = -1;
 
         public void Initialize(ColorBlockEscapeRuntimeLevel level, GridWorldLayout layout,
-            Camera sceneCamera, IReadOnlyDictionary<string, Transform> blockViews)
+            Camera sceneCamera, IReadOnlyDictionary<string, Transform> blockViews,
+            ExitCaptureSettings exitSettings = null)
         {
             _level = level ?? throw new ArgumentNullException(nameof(level));
             _camera = sceneCamera ?? throw new ArgumentNullException(nameof(sceneCamera));
             _layout = layout;
-            _movement = new PlainBlockMovement(level, layout);
+            _exitCapture = exitSettings == null ? null :
+                new ColorBlockEscapeExitCapture(level, layout, exitSettings);
+            _movement = new PlainBlockMovement(level, layout, _exitCapture);
             _views = new Dictionary<string, Transform>(blockViews);
             _input = new PuzzleFramework.Interaction.InputSystem();
         }
 
         private void Update()
         {
+            if (_exitCapture != null)
+            {
+                _exitCapture.Advance(Time.deltaTime);
+                foreach (BlockRuntimeState block in _level.Blocks)
+                {
+                    if (block.Lifecycle == BlockLifecycle.Exiting)
+                        PositionView(block.Id, _layout.BoardLocalToWorld(block.ContinuousOrigin));
+                    else if (block.Lifecycle == BlockLifecycle.Removed)
+                        _views[block.Id].gameObject.SetActive(false);
+                }
+            }
             if (_movement == null || !TryReadPointer(out int id, out Vector2 screen,
                     out bool pressed, out bool held, out bool released)) return;
             ProcessPointerSample(id, screen, pressed, held, released);
@@ -150,7 +165,11 @@ namespace ColorBlockEscape.Runtime
                 if (_owner._movement.ActiveBlockId != _id) return;
                 Vector3 requested = BoardPointerProjection.ApplyOffset(
                     context.WorldPosition, _pointerOffset);
-                _owner.PositionView(_id, _owner._movement.Move(requested).WorldPosition);
+                PlainBlockMoveResult move = _owner._movement.Move(requested);
+                _owner.PositionView(_id, move.WorldPosition);
+                if (!move.WasCaptured) return;
+                _owner._input.EndPointerPress(context);
+                _owner._activePointerId = -1;
             }
 
             public void OnDragEnd(InteractionPointerContext context)
