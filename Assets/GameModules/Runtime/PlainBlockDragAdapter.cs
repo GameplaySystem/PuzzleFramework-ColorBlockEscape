@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Interaction;
+using PuzzleFramework.RuntimeFlow;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -19,19 +20,22 @@ namespace ColorBlockEscape.Runtime
         private Camera _camera;
         private PlainBlockMovement _movement;
         private ColorBlockEscapeExitCapture _exitCapture;
+        private ColorBlockEscapeOutcomeSession _outcome;
         private Dictionary<string, Transform> _views;
         private PuzzleFramework.Interaction.InputSystem _input;
         private int _activePointerId = -1;
 
         public void Initialize(ColorBlockEscapeRuntimeLevel level, GridWorldLayout layout,
             Camera sceneCamera, IReadOnlyDictionary<string, Transform> blockViews,
-            ExitCaptureSettings exitSettings = null)
+            ExitCaptureSettings exitSettings = null,
+            ColorBlockEscapeOutcomeSession outcome = null)
         {
             _level = level ?? throw new ArgumentNullException(nameof(level));
             _camera = sceneCamera ?? throw new ArgumentNullException(nameof(sceneCamera));
             _layout = layout;
             _exitCapture = exitSettings == null ? null :
                 new ColorBlockEscapeExitCapture(level, layout, exitSettings);
+            _outcome = outcome;
             _movement = new PlainBlockMovement(level, layout, _exitCapture);
             _views = new Dictionary<string, Transform>(blockViews);
             _input = new PuzzleFramework.Interaction.InputSystem();
@@ -39,6 +43,10 @@ namespace ColorBlockEscape.Runtime
 
         private void Update()
         {
+            if (_movement == null) return;
+            _outcome?.AdvanceTime(Time.deltaTime);
+            if (_outcome != null && _outcome.State != GameState.Playing)
+                FinishActiveDragForTerminalState();
             if (_exitCapture != null)
             {
                 _exitCapture.Advance(Time.deltaTime);
@@ -50,9 +58,11 @@ namespace ColorBlockEscape.Runtime
                         _views[block.Id].gameObject.SetActive(false);
                 }
             }
-            if (_movement == null || !TryReadPointer(out int id, out Vector2 screen,
-                    out bool pressed, out bool held, out bool released)) return;
-            ProcessPointerSample(id, screen, pressed, held, released);
+            if ((_outcome == null || _outcome.State == GameState.Playing) &&
+                TryReadPointer(out int id, out Vector2 screen,
+                    out bool pressed, out bool held, out bool released))
+                ProcessPointerSample(id, screen, pressed, held, released);
+            _outcome?.ResolveBoundary();
         }
 
         /// <summary>Applies one screen-space pointer sample through the shared drag lifecycle.</summary>
@@ -60,6 +70,7 @@ namespace ColorBlockEscape.Runtime
             bool pressed, bool held, bool released)
         {
             if (_movement == null) throw new InvalidOperationException("Adapter is not initialized.");
+            if (_outcome != null && _outcome.State != GameState.Playing) return;
             if (_activePointerId >= 0 && _activePointerId != id) return;
             if (!BoardPointerProjection.TryProject(_camera.ScreenPointToRay(screen),
                     _layout.BoardOrigin, Vector3.Cross(_layout.BoardXAxis, _layout.BoardYAxis),
@@ -102,6 +113,15 @@ namespace ColorBlockEscape.Runtime
                 }
             }
             return null;
+        }
+
+        private void FinishActiveDragForTerminalState()
+        {
+            if (_activePointerId < 0) return;
+            string blockId = _movement.ActiveBlockId;
+            if (blockId != null) PositionView(blockId, _movement.End().WorldPosition);
+            _activePointerId = -1;
+            _input = new PuzzleFramework.Interaction.InputSystem();
         }
 
         private void PositionView(string id, Vector3 logicalWorldPosition)

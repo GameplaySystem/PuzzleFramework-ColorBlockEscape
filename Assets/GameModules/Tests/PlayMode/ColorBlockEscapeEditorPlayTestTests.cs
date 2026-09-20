@@ -5,6 +5,7 @@ using NUnit.Framework;
 using PuzzleFramework.Content;
 using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Presentation;
+using PuzzleFramework.RuntimeFlow;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -43,6 +44,15 @@ namespace ColorBlockEscape.Tests
                 Assert.IsTrue(level.Exits[0].IsBusy);
                 Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(
                     new GridCoordinate(2, 5)));
+                yield return null;
+                Assert.AreEqual(GameState.Won, editor.PlayTestOutcome.State);
+                Assert.AreEqual(TimerStatus.Stopped, editor.PlayTestOutcome.TimerStatus);
+                Assert.IsTrue(editor.RestartPlayTest());
+                Assert.AreNotSame(level, editor.PlayTestLevel);
+                Assert.AreEqual(GameState.Playing, editor.PlayTestOutcome.State);
+                Assert.AreEqual(60f, editor.PlayTestOutcome.RemainingSeconds);
+                Assert.AreEqual(BlockLifecycle.OnBoard, editor.PlayTestLevel.Blocks[0].Lifecycle);
+                Assert.IsFalse(editor.PlayTestLevel.Exits[0].IsBusy);
                 editor.ReturnFromPlayTest();
                 Assert.IsTrue(editor.Model.Core.TryGetItem("block", out AuthoredFootprint item));
                 Assert.AreEqual(new GridCoordinate(2, 5), item.Origin);
