@@ -20,32 +20,39 @@ namespace ColorBlockEscape.Runtime.Authoring
         };
 
         public static Dictionary<string, Transform> Build(ColorBlockEscapeAuthoringSession model,
-            ColorBlockEscapeRuntimeLevel runtime, GridWorldLayout layout, Transform root)
+            ColorBlockEscapeRuntimeLevel runtime, GridWorldLayout layout, Transform root,
+            ModularBoardCellView boardCellPrefab = null)
         {
             LevelAuthoringCore core = model.Core;
+            bool modularBoardBuilt = TryBuildModularBoard(model, layout, root, boardCellPrefab);
             foreach (CellDefinitionData cell in core.CreateBoardSnapshot().Cells)
             {
                 if (cell.CellState == AuthoredCellState.Inactive) continue;
                 GridCoordinate coordinate = new(cell.Coordinate.X, cell.Coordinate.Y);
+                if (modularBoardBuilt && cell.CellState == AuthoredCellState.Active) continue;
                 Color color = cell.CellState == AuthoredCellState.Blocked
                     ? new Color(0.20f, 0.23f, 0.29f) : new Color(0.74f, 0.77f, 0.82f);
                 Cube($"Cell {coordinate}", layout.CellCenterToWorld(coordinate) + Vector3.forward * 0.16f,
                     new Vector3(0.96f, 0.96f, 0.12f), color, root);
             }
 
-            WallGenerationResult boundary = core.CreateBoundary(state => state == AuthoredCellState.Active);
-            foreach (BoardBoundaryEdge edge in boundary.ExposedEdges)
+            if (!modularBoardBuilt)
             {
-                if (IsOpening(model.Exits, edge)) continue;
-                Vector3 center = layout.CellCenterToWorld(edge.CellCoordinate);
-                bool horizontal = edge.Direction == BoardEdgeDirection.North ||
-                                  edge.Direction == BoardEdgeDirection.South;
-                Vector3 position = center + (horizontal
-                    ? Vector3.up * (edge.Direction == BoardEdgeDirection.North ? 0.5f : -0.5f)
-                    : Vector3.right * (edge.Direction == BoardEdgeDirection.East ? 0.5f : -0.5f));
-                Cube("Boundary", position + Vector3.back * 0.03f,
-                    horizontal ? new Vector3(1f, 0.09f, 0.2f) : new Vector3(0.09f, 1f, 0.2f),
-                    new Color(0.37f, 0.43f, 0.53f), root);
+                WallGenerationResult boundary = core.CreateBoundary(
+                    state => state == AuthoredCellState.Active);
+                foreach (BoardBoundaryEdge edge in boundary.ExposedEdges)
+                {
+                    if (IsOpening(model.Exits, edge)) continue;
+                    Vector3 center = layout.CellCenterToWorld(edge.CellCoordinate);
+                    bool horizontal = edge.Direction == BoardEdgeDirection.North ||
+                                      edge.Direction == BoardEdgeDirection.South;
+                    Vector3 position = center + (horizontal
+                        ? Vector3.up * (edge.Direction == BoardEdgeDirection.North ? 0.5f : -0.5f)
+                        : Vector3.right * (edge.Direction == BoardEdgeDirection.East ? 0.5f : -0.5f));
+                    Cube("Boundary", position + Vector3.back * 0.03f,
+                        horizontal ? new Vector3(1f, 0.09f, 0.2f) : new Vector3(0.09f, 1f, 0.2f),
+                        new Color(0.37f, 0.43f, 0.53f), root);
+                }
             }
 
             foreach (ExitDefinition exit in model.Exits)
@@ -81,7 +88,47 @@ namespace ColorBlockEscape.Runtime.Authoring
             return views;
         }
 
-        public static Color Tint(ColorIdentity color) => Palette[Mathf.Clamp((int)color, 0, 9)];
+        private static bool TryBuildModularBoard(ColorBlockEscapeAuthoringSession model,
+            GridWorldLayout layout, Transform root, ModularBoardCellView boardCellPrefab)
+        {
+            if (boardCellPrefab == null) return false;
+            WallGenerationResult boundary = model.Core.CreateBoundary(
+                state => state == AuthoredCellState.Active);
+            ModularBoardVisualPlan plan = new ModularBoardVisualPlanner().CreatePlan(boundary);
+            GameObject boardRoot = new("Modular board visuals");
+            boardRoot.transform.SetParent(root, false);
+            ModularBoardVisualBuilder builder = new();
+            if (!builder.TryRebuild(plan, boardCellPrefab, boardRoot.transform, layout, 0f,
+                    out IReadOnlyList<ModularBoardCellView> cells, out string failure))
+            {
+                if (Application.isPlaying) Object.Destroy(boardRoot);
+                else Object.DestroyImmediate(boardRoot);
+                Debug.LogWarning($"CBE modular board visual fallback: {failure}");
+                return false;
+            }
+
+            Dictionary<GridCoordinate, ModularBoardCellView> byCoordinate = new();
+            foreach (ModularBoardCellView cell in cells) byCoordinate[cell.Coordinate] = cell;
+            foreach (ExitDefinition exit in model.Exits)
+                for (int index = 0; index < exit.Width; index++)
+                {
+                    GridCoordinate coordinate = ExitBoundaryValidator.EdgeCellAt(exit, index);
+                    if (byCoordinate.TryGetValue(coordinate, out ModularBoardCellView cell))
+                        cell.SetBoundaryEdgeVisible(Direction(exit.Side), false);
+                }
+            return true;
+        }
+
+        private static BoardEdgeDirection Direction(ExitSide side) => side switch
+        {
+            ExitSide.Top => BoardEdgeDirection.North,
+            ExitSide.Bottom => BoardEdgeDirection.South,
+            ExitSide.Left => BoardEdgeDirection.West,
+            _ => BoardEdgeDirection.East
+        };
+
+        public static Color Tint(ColorIdentity color) =>
+            Palette[Mathf.Clamp((int)color - (int)ColorIdentity.Slot0, 0, 9)];
 
         /// <summary>Shows every proposed opening segment, including invalid width overflow.</summary>
         public static void BuildExitPreview(ExitSide side, GridCoordinate start, int width,
@@ -138,7 +185,9 @@ namespace ColorBlockEscape.Runtime.Authoring
         {
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.name = name;
-            Object.Destroy(cube.GetComponent<Collider>());
+            Collider collider = cube.GetComponent<Collider>();
+            if (Application.isPlaying) Object.Destroy(collider);
+            else Object.DestroyImmediate(collider);
             cube.transform.SetParent(parent, false);
             if (local) cube.transform.localPosition = position;
             else cube.transform.position = position;

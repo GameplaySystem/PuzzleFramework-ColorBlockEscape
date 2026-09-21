@@ -151,6 +151,9 @@ namespace ColorBlockEscape.Runtime.Authoring
             return removed > 0;
         }
 
+        public bool EraseExitAt(GridCoordinate edgeCell, ExitSide side) =>
+            SelectExitAt(edgeCell, side) && EraseSelectedExit();
+
         public AuthoringEditResult SetTimer(float duration, float warning)
         {
             if (duration <= 0f || warning < 0f || warning > duration ||

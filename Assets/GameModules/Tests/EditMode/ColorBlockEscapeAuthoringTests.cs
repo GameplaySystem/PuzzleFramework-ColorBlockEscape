@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using ColorBlockEscape.Runtime;
 using ColorBlockEscape.Runtime.Authoring;
 using NUnit.Framework;
@@ -7,11 +8,43 @@ using PuzzleFramework.Content;
 using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Presentation;
 using UnityEngine;
+using UnityEditor;
 
 namespace ColorBlockEscape.Tests
 {
     public sealed class ColorBlockEscapeAuthoringTests
     {
+        [Test]
+        public void ImportedDtmBoardPrefabBuildsCbeBoardAndSuppressesExitWall()
+        {
+            ModularBoardCellView prefab = AssetDatabase.LoadAssetAtPath<ModularBoardCellView>(
+                "Assets/RuntimeAssets/Board/CellPrefab.prefab");
+            Assert.IsNotNull(prefab);
+            Assert.IsTrue(prefab.TryValidateConfiguration(out string configurationFailure),
+                configurationFailure);
+            ColorBlockEscapeAuthoringSession model = new(3, 3);
+            Assert.IsTrue(model.PutExit("exit", ExitSide.Top, new GridCoordinate(1, 2),
+                1, ColorIdentity.Slot0).Success);
+            GridWorldLayout layout = new(Vector3.zero, Vector2.one,
+                Vector3.right, Vector3.up, GridCellAnchor.Corner);
+            GameObject root = new("CBE board asset test");
+            try
+            {
+                ColorBlockEscapeAuthoringView.Build(model, null, layout, root.transform, prefab);
+                Transform generated = root.transform.Find("Modular board visuals");
+                Assert.IsNotNull(generated);
+                Assert.AreEqual(9, generated.childCount);
+                ModularBoardCellView exitCell = generated
+                    .GetComponentsInChildren<ModularBoardCellView>(true)
+                    .Single(cell => cell.Coordinate == new GridCoordinate(1, 2));
+                Transform[] northWalls = exitCell.GetComponentsInChildren<Transform>(true)
+                    .Where(child => child.name == "NorthWalls").ToArray();
+                Assert.AreEqual(2, northWalls.Length);
+                Assert.IsTrue(northWalls.All(wall => !wall.gameObject.activeSelf));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
         [Test]
         public void BlockEditsUseLiveSessionAndFailuresLeaveOriginalFootprint()
         {

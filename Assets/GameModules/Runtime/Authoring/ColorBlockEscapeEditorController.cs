@@ -15,12 +15,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         [SerializeField, Range(0.01f, 1f)] private float _captureOverlapFraction = 0.70f;
         [SerializeField, Min(0f)] private float _captureDistanceCells = 0.35f;
         [SerializeField, Min(0.01f)] private float _exitSpeedCellsPerSecond = 3f;
-        private static readonly string[] ToolNames =
-        {
-            "Place block", "Select / move", "Erase block", "Active cell", "Inactive cell",
-            "Blocked cell", "Place / edit exit", "Select exit", "Erase exit"
-        };
-
+        [SerializeField] private ModularBoardCellView _boardCellPrefab;
         private ColorBlockEscapeAuthoringSession _model;
         private ColorBlockEscapeAuthoringTools _tools;
         private GridWorldLayout _layout;
@@ -31,7 +26,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         private ColorBlockEscapeOutcomeSession _playTestOutcome;
         private GameObject _previewRoot;
         private string _previewKey;
-        private int _toolIndex;
+        private ColorBlockEscapeAuthoringMode _mode;
         private int _colorIndex;
         private int _shapeIndex;
         private string _width = "6";
@@ -52,6 +47,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         public bool IsPlayTesting => _playRoot != null;
         public ColorBlockEscapeRuntimeLevel PlayTestLevel => _playTestLevel;
         public ColorBlockEscapeOutcomeSession PlayTestOutcome => _playTestOutcome;
+        public ColorBlockEscapeAuthoringMode CurrentMode => _mode;
 
         private void Awake()
         {
@@ -68,21 +64,33 @@ namespace ColorBlockEscape.Runtime.Authoring
         private void Update()
         {
             if (_camera == null || IsPlayTesting || Mouse.current == null) return;
-            UpdateExitPreview();
-            if (!Mouse.current.leftButton.wasPressedThisFrame) return;
             Vector2 screen = Mouse.current.position.ReadValue();
-            if (screen.x < 330f) return;
-            Ray ray = _camera.ScreenPointToRay(screen);
-            bool edgeTool = ToolNames[_toolIndex].Contains("exit");
-            if (_toolIndex == 6 && !TryParsePositive(_exitWidth, out _))
-            { _message = "Exit width must be a positive integer."; return; }
+            bool pointerOverBoard = screen.x >= 330f;
+            if (GUIUtility.keyboardControl == 0)
+                ProcessKeyboardShortcuts();
+            if (pointerOverBoard) ProcessShapeScroll(Mouse.current.scroll.ReadValue().y);
+            UpdateExitPreview();
+            bool place = Mouse.current.leftButton.wasPressedThisFrame;
+            bool erase = Mouse.current.rightButton.wasPressedThisFrame;
+            if (!pointerOverBoard || (!place && !erase)) return;
+            ProcessAuthoringClick(_camera.ScreenPointToRay(screen), erase);
+        }
+
+        /// <summary>Routes one board click through the active CBE mode.</summary>
+        public bool ProcessAuthoringClick(Ray ray, bool erase)
+        {
+            bool edgeTool = _mode == ColorBlockEscapeAuthoringMode.PlaceEditExit ||
+                            _mode == ColorBlockEscapeAuthoringMode.SelectExit;
+            if (!erase && _mode == ColorBlockEscapeAuthoringMode.PlaceEditExit &&
+                !TryParsePositive(_exitWidth, out _))
+            { _message = "Exit width must be a positive integer."; return false; }
             AuthoringTarget target;
             if (edgeTool)
             {
                 WallGenerationResult boundary = _model.Core.CreateBoundary(
                     state => state == AuthoredCellState.Active);
                 if (!BoardAuthoringPicker.TryPickBoundaryEdge(ray, _layout, _layout.BoardOrigin,
-                        boundary, 0.24f, out BoardBoundaryEdge edge)) return;
+                        boundary, 0.24f, out BoardBoundaryEdge edge)) return false;
                 target = AuthoringTarget.ForBoundaryEdge(edge);
                 _exitSide = edge.Direction switch
                 {
@@ -98,13 +106,34 @@ namespace ColorBlockEscape.Runtime.Authoring
             {
                 if (!BoardAuthoringPicker.TryPickCell(ray, _layout, _layout.BoardOrigin,
                         out GridCoordinate cell) || cell.X < 0 || cell.Y < 0 ||
-                    cell.X >= _model.Core.Width || cell.Y >= _model.Core.Height) return;
+                    cell.X >= _model.Core.Width || cell.Y >= _model.Core.Height) return false;
                 target = AuthoringTarget.ForCell(cell);
             }
+
+            if (erase)
+            {
+                AuthoringEditResult erased = _mode switch
+                {
+                    ColorBlockEscapeAuthoringMode.PlaceBlock =>
+                        _model.EraseBlockAt(target.Cell) ? AuthoringEditResult.Accepted :
+                            new AuthoringEditResult(false, "No block at this cell.", null),
+                    ColorBlockEscapeAuthoringMode.PlaceEditExit =>
+                        _model.EraseExitAt(target.Cell, Side(target.Edge.Direction))
+                            ? AuthoringEditResult.Accepted
+                            : new AuthoringEditResult(false, "No exit on this edge.", null),
+                    _ => new AuthoringEditResult(false,
+                        "Right-click erase is available in block or exit placement mode.", null)
+                };
+                Show(erased);
+                if (erased.Success) { SyncExitFields(); RefreshEditorView(); }
+                return erased.Success;
+            }
+
             AuthoringEditResult preview = _tools.Host.Preview(target);
             AuthoringEditResult result = preview.Success ? _tools.Host.Apply(target) : preview;
             Show(result);
             if (result.Success) { SyncExitFields(); RefreshEditorView(); }
+            return result.Success;
         }
 
         private void OnGUI()
@@ -123,13 +152,11 @@ namespace ColorBlockEscape.Runtime.Authoring
                 return;
             }
 
-            int nextTool = GUILayout.SelectionGrid(_toolIndex, ToolNames, 2);
-            if (nextTool != _toolIndex)
-            {
-                _toolIndex = nextTool;
-                _tools.SelectTool(ToolNames[_toolIndex]);
-                ClearPreview();
-            }
+            GUILayout.Label($"Mode: {ModeLabel(_mode)}");
+            GUILayout.Label("B Block   M Move/select   O Obstacle toggle");
+            GUILayout.Label("E Exit place/edit   S Exit select");
+            GUILayout.Label("Left click applies. Right click erases in B/E.");
+            GUILayout.Label("0-9 choose color. Mouse wheel changes block shape.");
 
             GUILayout.Space(8);
             GUILayout.Label($"Board {_model.Core.Width} × {_model.Core.Height}");
@@ -176,7 +203,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             GUILayout.Label("Color slot");
             _colorIndex = GUILayout.SelectionGrid(_colorIndex,
                 new[] { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" }, 5);
-            _tools.Color = (ColorIdentity)_colorIndex;
+            _tools.Color = (ColorIdentity)((int)ColorIdentity.Slot0 + _colorIndex);
             if (_model.Core.SelectedItemId != null)
             {
                 GUILayout.Label($"Selected block: {_model.Core.SelectedItemId}");
@@ -242,7 +269,7 @@ namespace ColorBlockEscape.Runtime.Authoring
                 if (_model.TryLoad(_path, out string failure))
                 {
                     _tools = _tools.RebindAfterLoad();
-                    _tools.SelectTool(ToolNames[_toolIndex]);
+                    SelectMode(_mode);
                     _width = _model.Core.Width.ToString();
                     _height = _model.Core.Height.ToString();
                     _duration = _model.Core.Timer.DurationSeconds.ToString(CultureInfo.InvariantCulture);
@@ -270,7 +297,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             _playRoot = new GameObject("CBE isolated play-test");
             _playRoot.transform.SetParent(transform, false);
             Dictionary<string, Transform> views = ColorBlockEscapeAuthoringView.Build(
-                _model, level, _layout, _playRoot.transform);
+                _model, level, _layout, _playRoot.transform, _boardCellPrefab);
             ExitCaptureSettings settings = new(
                 _captureOverlapFraction > 0f ? _captureOverlapFraction : 0.70f,
                 Mathf.Max(0f, _captureDistanceCells),
@@ -322,7 +349,8 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (_authoringRoot != null) Destroy(_authoringRoot);
             _authoringRoot = new GameObject("CBE authoring preview");
             _authoringRoot.transform.SetParent(transform, false);
-            ColorBlockEscapeAuthoringView.Build(_model, null, _layout, _authoringRoot.transform);
+            ColorBlockEscapeAuthoringView.Build(_model, null, _layout, _authoringRoot.transform,
+                _boardCellPrefab);
             if (_camera != null)
             {
                 _camera.orthographic = true;
@@ -343,9 +371,117 @@ namespace ColorBlockEscape.Runtime.Authoring
             _exitX = exit.StartCell.X.ToString();
             _exitY = exit.StartCell.Y.ToString();
             _exitWidth = exit.Width.ToString();
-            _colorIndex = (int)exit.Color;
+            _colorIndex = Mathf.Clamp((int)exit.Color - (int)ColorIdentity.Slot0, 0, 9);
             _tools.Color = exit.Color;
         }
+
+        /// <summary>Selects one authoring mode without routing through clickable HUD controls.</summary>
+        public bool SelectMode(ColorBlockEscapeAuthoringMode mode)
+        {
+            if (!_tools.SelectTool(ToolId(mode))) return false;
+            _mode = mode;
+            ClearPreview();
+            _message = $"Mode: {ModeLabel(mode)}";
+            return true;
+        }
+
+        /// <summary>Processes one mnemonic mode shortcut; useful to scene input and focused tests.</summary>
+        public bool ProcessModeShortcut(Key key)
+        {
+            return key switch
+            {
+                Key.B => SelectMode(ColorBlockEscapeAuthoringMode.PlaceBlock),
+                Key.M => SelectMode(ColorBlockEscapeAuthoringMode.SelectMoveBlock),
+                Key.O => SelectMode(ColorBlockEscapeAuthoringMode.ToggleObstacle),
+                Key.E => SelectMode(ColorBlockEscapeAuthoringMode.PlaceEditExit),
+                Key.S => SelectMode(ColorBlockEscapeAuthoringMode.SelectExit),
+                _ => false
+            };
+        }
+
+        /// <summary>Maps top-row or numpad digits to the shared ten color identities.</summary>
+        public bool ProcessColorShortcut(Key key)
+        {
+            int slot = key switch
+            {
+                Key.Digit0 or Key.Numpad0 => 0,
+                Key.Digit1 or Key.Numpad1 => 1,
+                Key.Digit2 or Key.Numpad2 => 2,
+                Key.Digit3 or Key.Numpad3 => 3,
+                Key.Digit4 or Key.Numpad4 => 4,
+                Key.Digit5 or Key.Numpad5 => 5,
+                Key.Digit6 or Key.Numpad6 => 6,
+                Key.Digit7 or Key.Numpad7 => 7,
+                Key.Digit8 or Key.Numpad8 => 8,
+                Key.Digit9 or Key.Numpad9 => 9,
+                _ => -1
+            };
+            if (slot < 0) return false;
+            _colorIndex = slot;
+            _tools.Color = (ColorIdentity)((int)ColorIdentity.Slot0 + slot);
+            _message = $"Color slot {slot}.";
+            ClearPreview();
+            return true;
+        }
+
+        /// <summary>Cycles preset block shapes by one mouse-wheel step.</summary>
+        public bool ProcessShapeScroll(float scrollY)
+        {
+            if (Mathf.Approximately(scrollY, 0f)) return false;
+            int count = Enum.GetValues(typeof(BlockShapePreset)).Length;
+            _shapeIndex = (_shapeIndex + (scrollY > 0f ? -1 : 1) + count) % count;
+            _tools.Shape = (BlockShapePreset)_shapeIndex;
+            _tools.CustomOffsets = null;
+            _message = $"Block shape: {_tools.Shape}.";
+            return true;
+        }
+
+        private void ProcessKeyboardShortcuts()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null) return;
+            foreach (Key key in new[] { Key.B, Key.M, Key.O, Key.E, Key.S })
+                if (keyboard[key].wasPressedThisFrame) { ProcessModeShortcut(key); return; }
+            foreach (Key key in new[]
+            {
+                Key.Digit0, Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4,
+                Key.Digit5, Key.Digit6, Key.Digit7, Key.Digit8, Key.Digit9,
+                Key.Numpad0, Key.Numpad1, Key.Numpad2, Key.Numpad3, Key.Numpad4,
+                Key.Numpad5, Key.Numpad6, Key.Numpad7, Key.Numpad8, Key.Numpad9
+            })
+            {
+                if (keyboard[key].wasPressedThisFrame) { ProcessColorShortcut(key); return; }
+            }
+        }
+
+        private static string ToolId(ColorBlockEscapeAuthoringMode mode) => mode switch
+        {
+            ColorBlockEscapeAuthoringMode.PlaceBlock => ColorBlockEscapeAuthoringTools.PlaceBlockToolId,
+            ColorBlockEscapeAuthoringMode.SelectMoveBlock => ColorBlockEscapeAuthoringTools.SelectMoveToolId,
+            ColorBlockEscapeAuthoringMode.ToggleObstacle => ColorBlockEscapeAuthoringTools.ToggleObstacleToolId,
+            ColorBlockEscapeAuthoringMode.PlaceEditExit => ColorBlockEscapeAuthoringTools.PlaceEditExitToolId,
+            ColorBlockEscapeAuthoringMode.SelectExit => ColorBlockEscapeAuthoringTools.SelectExitToolId,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
+        };
+
+        private static string ModeLabel(ColorBlockEscapeAuthoringMode mode) => mode switch
+        {
+            ColorBlockEscapeAuthoringMode.PlaceBlock => "B - Place block",
+            ColorBlockEscapeAuthoringMode.SelectMoveBlock => "M - Select / move block",
+            ColorBlockEscapeAuthoringMode.ToggleObstacle => "O - Toggle obstacle",
+            ColorBlockEscapeAuthoringMode.PlaceEditExit => "E - Place / edit exit",
+            ColorBlockEscapeAuthoringMode.SelectExit => "S - Select exit",
+            _ => mode.ToString()
+        };
+
+        private static ExitSide Side(BoardEdgeDirection direction) => direction switch
+        {
+            BoardEdgeDirection.North => ExitSide.Top,
+            BoardEdgeDirection.South => ExitSide.Bottom,
+            BoardEdgeDirection.West => ExitSide.Left,
+            BoardEdgeDirection.East => ExitSide.Right,
+            _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
+        };
 
         private bool TryExitFields(out GridCoordinate start, out int width)
         {
@@ -380,7 +516,7 @@ namespace ColorBlockEscape.Runtime.Authoring
 
         private void UpdateExitPreview()
         {
-            if (_toolIndex != 6 || _authoringRoot == null)
+            if (_mode != ColorBlockEscapeAuthoringMode.PlaceEditExit || _authoringRoot == null)
             { ClearPreview(); return; }
             if (!TryParsePositive(_exitWidth, out _))
             { ClearPreview(); _message = "Exit width must be a positive integer."; return; }

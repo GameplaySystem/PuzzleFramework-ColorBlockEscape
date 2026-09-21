@@ -231,6 +231,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9de26a6d9a1b0af4385ab6796dbc3d94, type: 3}
   m_Name:
   m_EditorClassIdentifier: ColorBlockEscape.Runtime::ColorBlockEscape.Runtime.Authoring.ColorBlockEscapeEditorController
+  _boardCellPrefab: {fileID: 135422902841736654, guid: 5c84238caef74744b89f15e81b4efd80, type: 3}
 --- !u!4 &1196391381
 Transform:
   m_ObjectHideFlags: 0

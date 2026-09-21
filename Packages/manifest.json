@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "com.gaming.puzzleframework": "https://github.com/GameplaySystem/PuzzleFramework.git?path=/Packages/com.gaming.puzzleframework#c485272d5e0b9764d67fe1b07a5e9af6429623f7",
+    "com.gaming.puzzleframework": "https://github.com/GameplaySystem/PuzzleFramework.git?path=/Packages/com.gaming.puzzleframework#fe9f9bc6635554b81f327844207cd1c36c33f9e8",
     "com.unity.ai.navigation": "2.0.12",
     "com.unity.collab-proxy": "2.12.4",
     "com.unity.ide.rider": "3.0.40",

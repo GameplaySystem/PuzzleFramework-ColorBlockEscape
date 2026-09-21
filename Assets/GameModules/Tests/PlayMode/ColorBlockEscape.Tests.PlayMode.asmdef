@@ -1,6 +1,6 @@
 {
   "name": "ColorBlockEscape.Tests.PlayMode",
   "rootNamespace": "ColorBlockEscape.Tests",
-  "references": ["ColorBlockEscape.Runtime", "PuzzleFramework.Runtime"],
+  "references": ["ColorBlockEscape.Runtime", "PuzzleFramework.Runtime", "Unity.InputSystem"],
   "optionalUnityReferences": ["TestAssemblies"]
 }

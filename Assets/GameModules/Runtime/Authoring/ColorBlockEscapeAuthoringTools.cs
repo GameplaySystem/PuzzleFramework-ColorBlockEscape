@@ -8,6 +8,16 @@ namespace ColorBlockEscape.Runtime.Authoring
 {
     public enum BlockShapePreset { Single, Bar2, Bar3, Square2, Rectangle2x3, Square3, L, T, S, Z }
 
+    /// <summary>CBE-owned authoring modes selected by the scene's mnemonic shortcuts.</summary>
+    public enum ColorBlockEscapeAuthoringMode
+    {
+        PlaceBlock,
+        SelectMoveBlock,
+        ToggleObstacle,
+        PlaceEditExit,
+        SelectExit
+    }
+
     /// <summary>Editor-only palette names; saved levels retain explicit offsets.</summary>
     public static class BlockShapePresets
     {
@@ -37,6 +47,12 @@ namespace ColorBlockEscape.Runtime.Authoring
     /// <summary>CBE tool payload and explicit registration over framework target dispatch.</summary>
     public sealed class ColorBlockEscapeAuthoringTools
     {
+        public const string PlaceBlockToolId = "Place block";
+        public const string SelectMoveToolId = "Select / move";
+        public const string ToggleObstacleToolId = "Toggle obstacle";
+        public const string PlaceEditExitToolId = "Place / edit exit";
+        public const string SelectExitToolId = "Select exit";
+
         private readonly ColorBlockEscapeAuthoringSession _model;
         private int _nextId = 1;
 
@@ -44,19 +60,14 @@ namespace ColorBlockEscape.Runtime.Authoring
         {
             _model = model ?? throw new ArgumentNullException(nameof(model));
             Host = new AuthoringToolHost(model.Core);
-            Register("Place block", AuthoringTargetKind.Cell, PlacePreview, PlaceApply);
-            Register("Select / move", AuthoringTargetKind.Cell, SelectPreview, SelectApply);
-            Register("Erase block", AuthoringTargetKind.Cell, _ => AuthoringEditResult.Accepted, EraseBlock);
-            Register("Active cell", AuthoringTargetKind.Cell, _ => AuthoringEditResult.Accepted,
-                target => _model.SetCell(target.Cell, AuthoredCellState.Active));
-            Register("Inactive cell", AuthoringTargetKind.Cell, _ => AuthoringEditResult.Accepted,
-                target => _model.SetCell(target.Cell, AuthoredCellState.Inactive));
-            Register("Blocked cell", AuthoringTargetKind.Cell, _ => AuthoringEditResult.Accepted,
-                target => _model.SetCell(target.Cell, AuthoredCellState.Blocked));
-            Register("Place / edit exit", AuthoringTargetKind.BoundaryEdge, ExitPreview, ExitApply);
-            Register("Select exit", AuthoringTargetKind.BoundaryEdge, _ => AuthoringEditResult.Accepted, SelectExit);
-            Register("Erase exit", AuthoringTargetKind.BoundaryEdge, _ => AuthoringEditResult.Accepted, EraseExit);
-            Host.SelectTool("Place block");
+            Register(PlaceBlockToolId, AuthoringTargetKind.Cell, PlacePreview, PlaceApply);
+            Register(SelectMoveToolId, AuthoringTargetKind.Cell, SelectPreview, SelectApply);
+            Register(ToggleObstacleToolId, AuthoringTargetKind.Cell,
+                _ => AuthoringEditResult.Accepted, ToggleObstacle);
+            Register(PlaceEditExitToolId, AuthoringTargetKind.BoundaryEdge, ExitPreview, ExitApply);
+            Register(SelectExitToolId, AuthoringTargetKind.BoundaryEdge,
+                _ => AuthoringEditResult.Accepted, SelectExit);
+            Host.SelectTool(PlaceBlockToolId);
         }
 
         public AuthoringToolHost Host { get; }
@@ -96,8 +107,14 @@ namespace ColorBlockEscape.Runtime.Authoring
             return _model.MoveSelectedBlock(target.Cell);
         }
 
-        private AuthoringEditResult EraseBlock(AuthoringTarget target) =>
-            _model.EraseBlockAt(target.Cell) ? AuthoringEditResult.Accepted : Reject("No block at this cell.");
+        private AuthoringEditResult ToggleObstacle(AuthoringTarget target)
+        {
+            AuthoredCellState current = _model.Core.GetCellState(target.Cell);
+            AuthoredCellState next = current == AuthoredCellState.Blocked
+                ? AuthoredCellState.Active
+                : AuthoredCellState.Blocked;
+            return _model.SetCell(target.Cell, next);
+        }
 
         private AuthoringEditResult ExitPreview(AuthoringTarget target)
         {
@@ -120,10 +137,6 @@ namespace ColorBlockEscape.Runtime.Authoring
 
         private AuthoringEditResult SelectExit(AuthoringTarget target) =>
             _model.SelectExitAt(target.Cell, Side(target.Edge.Direction))
-                ? AuthoringEditResult.Accepted : Reject("No exit on this edge.");
-
-        private AuthoringEditResult EraseExit(AuthoringTarget target) =>
-            _model.SelectExitAt(target.Cell, Side(target.Edge.Direction)) && _model.EraseSelectedExit()
                 ? AuthoringEditResult.Accepted : Reject("No exit on this edge.");
 
         private bool HasExitId(string id)

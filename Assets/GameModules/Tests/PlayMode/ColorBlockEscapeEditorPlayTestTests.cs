@@ -7,12 +7,63 @@ using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Presentation;
 using PuzzleFramework.RuntimeFlow;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
 
 namespace ColorBlockEscape.Tests
 {
     public sealed class ColorBlockEscapeEditorPlayTestTests
     {
+        [UnityTest]
+        public IEnumerator KeyboardModesColorShapeAndContextEraseDriveAuthoring()
+        {
+            GameObject cameraObject = new("CBE authoring input test camera");
+            cameraObject.tag = "MainCamera";
+            cameraObject.AddComponent<Camera>();
+            cameraObject.transform.position = new Vector3(3f, 3f, -10f);
+            GameObject editorObject = new("CBE authoring input test editor");
+            ColorBlockEscapeEditorController editor =
+                editorObject.AddComponent<ColorBlockEscapeEditorController>();
+            yield return null;
+            try
+            {
+                Assert.IsTrue(editor.ProcessModeShortcut(Key.O));
+                Assert.AreEqual(ColorBlockEscapeAuthoringMode.ToggleObstacle, editor.CurrentMode);
+                Ray cell = new(new Vector3(2.5f, 2.5f, -5f), Vector3.forward);
+                Assert.IsTrue(editor.ProcessAuthoringClick(cell, erase: false));
+                Assert.AreEqual(AuthoredCellState.Blocked,
+                    editor.Model.Core.GetCellState(new GridCoordinate(2, 2)));
+                Assert.IsTrue(editor.ProcessAuthoringClick(cell, erase: false));
+                Assert.AreEqual(AuthoredCellState.Active,
+                    editor.Model.Core.GetCellState(new GridCoordinate(2, 2)));
+
+                Assert.IsTrue(editor.ProcessColorShortcut(Key.Digit7));
+                Assert.IsTrue(editor.ProcessShapeScroll(-1f));
+                Assert.IsTrue(editor.ProcessModeShortcut(Key.B));
+                Assert.IsTrue(editor.ProcessAuthoringClick(cell, erase: false));
+                Assert.IsTrue(editor.Model.Core.TryFindItemAtCell(new GridCoordinate(2, 2),
+                    out AuthoredFootprint block));
+                Assert.AreEqual(2, block.Offsets.Count);
+                Assert.IsTrue(editor.Model.TryGetBlockColor(block.Id, out ColorIdentity color));
+                Assert.AreEqual(ColorIdentity.Slot7, color);
+                Assert.IsTrue(editor.ProcessAuthoringClick(cell, erase: true));
+                Assert.AreEqual(0, editor.Model.Core.Items.Count);
+
+                Assert.IsTrue(editor.ProcessModeShortcut(Key.E));
+                Ray edge = new(new Vector3(1.5f, 6.05f, -5f), Vector3.forward);
+                Assert.IsTrue(editor.ProcessAuthoringClick(edge, erase: false));
+                Assert.AreEqual(1, editor.Model.Exits.Count);
+                Assert.IsTrue(editor.ProcessAuthoringClick(edge, erase: true));
+                Assert.AreEqual(0, editor.Model.Exits.Count);
+            }
+            finally
+            {
+                Object.Destroy(editorObject);
+                Object.Destroy(cameraObject);
+            }
+            yield return null;
+        }
+
         [UnityTest]
         public IEnumerator AuthoredPlayTestPointerCapturesMatchingExitWithoutPresentation()
         {
