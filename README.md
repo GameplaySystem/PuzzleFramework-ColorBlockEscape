@@ -7,10 +7,6 @@ exit before the countdown ends. The project is the second framework consumer and
 shared movement, occupancy, runtime-flow, board-presentation, and authoring systems work beyond
 Drop The Man.
 
-> **Gameplay GIF pending:** the final capture will show free block dragging, collision against
-> obstacles and other blocks, matching-exit capture, progressive occupancy release, and the
-> timer/result flow. No generated mockup is presented as gameplay.
-
 ## Key Features
 
 - continuous free dragging of fixed-orientation multi-cell and irregular block footprints
@@ -73,8 +69,8 @@ flowchart LR
 
 Framework services answer generic questions such as whether a footprint can traverse or occupy a
 set of cells. CBE decides whether a colored block can use an exit, when control locks, when
-occupancy is released, and which outcome wins. A GitDiagram repository map will be added during the
-media pass, with this smaller explanation retained for readers who want the gameplay data flow.
+occupancy is released, and which outcome wins. The diagram keeps that gameplay data flow readable
+without exposing every repository dependency.
 
 ## Framework vs. Game-Specific Code
 
@@ -207,15 +203,15 @@ In progress or deferred:
 - owner-authored basic-shape block prefabs for editor/runtime views
 - chipper and fragment-scatter presentation
 - pooling for chipper fragments
-- final UI, tuning, mobile/device validation, and portfolio media
+- final UI, tuning, and mobile/device validation
 
 The current CBE verification passes **37/37 Edit Mode tests** and **4/4 Play Mode tests**.
 
 ## What I Built / Role
 
-This is my independent portfolio engineering project. I own the CBE gameplay architecture,
-continuous movement, exit and outcome rules, framework integration, custom editor tooling,
-serialization/construction path, automated tests, and technical documentation.
+This is my independent portfolio engineering project. I designed and directed the CBE gameplay
+architecture, reviewed and integrated implementations, built and debugged movement, exit, outcome,
+and editor systems, and own the framework integration, validation strategy, and documentation.
 
 ## Running the Project
 
@@ -229,18 +225,6 @@ Git must be installed and available to Unity. The project does not require a nei
 checkout because `Packages/manifest.json` pins the published package revision.
 
 Run tests through **Window > General > Test Runner**, using both EditMode and PlayMode.
-
-## Screenshots / Media
-
-The final portfolio media pass should add:
-
-- an authored-level gameplay GIF near the top
-- an editor capture showing block placement, obstacle editing, exit authoring, and play-test
-- a close-up of exit-wall suppression on the shared modular board
-- one DTM/CBE comparison visual demonstrating shared framework behavior
-- the GitDiagram export with the concise architecture explanation above
-
-Only captures from the running project will be used.
 
 ## Design Documentation
 
