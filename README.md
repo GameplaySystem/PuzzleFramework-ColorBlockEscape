@@ -19,7 +19,7 @@ Drop The Man.
 - runtime outcomes independent from exit or future chipper presentation timing
 - JSON payload codec plus validated runtime construction
 - a play-mode level editor built on the shared live framework authoring session
-- modular board visuals reused from DTM with validated exit wall openings
+- modular board meshes reused from DTM with CBE-owned URP materials and validated exit openings
 - generated footprint meshes shared by editor and runtime block views
 - a standalone gameplay scene and editor play-test that use the same runtime composition path
 
@@ -216,7 +216,7 @@ In progress or deferred:
 - pooling for chipper fragments
 - final UI, tuning, and mobile/device validation
 
-The current CBE verification passes **38/38 Edit Mode tests** and **6/6 Play Mode tests**.
+The current CBE verification passes **39/39 Edit Mode tests** and **6/6 Play Mode tests**.
 
 ## What I Built / Role
 

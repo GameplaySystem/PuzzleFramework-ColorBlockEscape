@@ -15,6 +15,26 @@ namespace ColorBlockEscape.Tests
     public sealed class ColorBlockEscapeAuthoringTests
     {
         [Test]
+        public void ImportedBoardPrefabUsesValidNonStencilMaterials()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/RuntimeAssets/Board/CellPrefab.prefab");
+            Assert.IsNotNull(prefab);
+
+            Renderer[] renderers = prefab.GetComponentsInChildren<Renderer>(true);
+            Assert.That(renderers, Is.Not.Empty);
+            foreach (Renderer renderer in renderers)
+                foreach (Material material in renderer.sharedMaterials)
+                {
+                    Assert.IsNotNull(material, $"{renderer.name} has a missing material.");
+                    Assert.IsNotNull(material.shader, $"{material.name} has no shader.");
+                    Assert.AreNotEqual("Hidden/InternalErrorShader", material.shader.name,
+                        $"{material.name} resolves to Unity's pink error shader.");
+                    Assert.That(material.name, Does.Not.Contain("Stencil"));
+                }
+        }
+
+        [Test]
         public void ImportedDtmBoardPrefabBuildsCbeBoardAndSuppressesExitWall()
         {
             ModularBoardCellView prefab = AssetDatabase.LoadAssetAtPath<ModularBoardCellView>(
