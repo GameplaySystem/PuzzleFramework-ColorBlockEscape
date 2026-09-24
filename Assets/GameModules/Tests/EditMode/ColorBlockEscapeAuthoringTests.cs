@@ -28,9 +28,11 @@ namespace ColorBlockEscape.Tests
             GridWorldLayout layout = new(Vector3.zero, Vector2.one,
                 Vector3.right, Vector3.up, GridCellAnchor.Corner);
             GameObject root = new("CBE board asset test");
+            using ColorBlockEscapeBlockMeshPresentation meshes = new();
             try
             {
-                ColorBlockEscapeAuthoringView.Build(model, null, layout, root.transform, prefab);
+                ColorBlockEscapeAuthoringView.Build(model, null, layout, root.transform, meshes,
+                    prefab);
                 Transform generated = root.transform.Find("Modular board visuals");
                 Assert.IsNotNull(generated);
                 Assert.AreEqual(9, generated.childCount);
@@ -43,6 +45,50 @@ namespace ColorBlockEscape.Tests
                 Assert.IsTrue(northWalls.All(wall => !wall.gameObject.activeSelf));
             }
             finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
+        [Test]
+        public void EditorAndRuntimeBlocksShareUnifiedGeneratedMeshAndGameOwnedColor()
+        {
+            ColorBlockEscapeAuthoringSession model = ReadyModel();
+            Assert.IsTrue(model.TryBeginPlayTest(out ColorBlockEscapeRuntimeLevel runtime,
+                out string failure), failure);
+            GridWorldLayout layout = new(Vector3.zero, Vector2.one,
+                Vector3.right, Vector3.up, GridCellAnchor.Corner);
+            GameObject editorRoot = new("CBE generated editor block test");
+            GameObject runtimeRoot = new("CBE generated runtime block test");
+            using ColorBlockEscapeBlockMeshPresentation meshes =
+                new(new ColorBlockEscapeBlockVisualProfile(0.24f, 0.04f, 2));
+            try
+            {
+                var editorViews = ColorBlockEscapeAuthoringView.Build(model, null, layout,
+                    editorRoot.transform, meshes);
+                var runtimeViews = ColorBlockEscapeAuthoringView.Build(model, runtime, layout,
+                    runtimeRoot.transform, meshes);
+
+                Transform editorBlock = editorViews["block"];
+                Transform runtimeBlock = runtimeViews["block"];
+                Mesh editorMesh = editorBlock.GetComponent<MeshFilter>().sharedMesh;
+                Mesh runtimeMesh = runtimeBlock.GetComponent<MeshFilter>().sharedMesh;
+                Assert.IsNotNull(editorMesh);
+                Assert.AreSame(editorMesh, runtimeMesh);
+                Assert.AreEqual(0, editorBlock.childCount);
+                Assert.AreEqual(1, meshes.CachedMeshCount);
+                Color expectedTint = ColorBlockEscapeAuthoringView.Tint(ColorIdentity.Slot0);
+                Color actualTint = editorBlock.GetComponent<MeshRenderer>().sharedMaterial.color;
+                Assert.That(actualTint.r, Is.EqualTo(expectedTint.r).Within(0.0001f));
+                Assert.That(actualTint.g, Is.EqualTo(expectedTint.g).Within(0.0001f));
+                Assert.That(actualTint.b, Is.EqualTo(expectedTint.b).Within(0.0001f));
+                Assert.That(actualTint.a, Is.EqualTo(expectedTint.a).Within(0.0001f));
+                Assert.That(editorMesh.bounds.size.x, Is.EqualTo(2f).Within(0.0001f));
+                Assert.That(editorMesh.bounds.size.y, Is.EqualTo(1f).Within(0.0001f));
+                Assert.That(editorMesh.bounds.size.z, Is.EqualTo(0.24f).Within(0.0001f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(editorRoot);
+                UnityEngine.Object.DestroyImmediate(runtimeRoot);
+            }
         }
 
         [Test]

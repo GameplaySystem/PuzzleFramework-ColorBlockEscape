@@ -21,8 +21,11 @@ namespace ColorBlockEscape.Runtime.Authoring
 
         public static Dictionary<string, Transform> Build(ColorBlockEscapeAuthoringSession model,
             ColorBlockEscapeRuntimeLevel runtime, GridWorldLayout layout, Transform root,
+            ColorBlockEscapeBlockMeshPresentation blockMeshPresentation,
             ModularBoardCellView boardCellPrefab = null)
         {
+            if (blockMeshPresentation == null)
+                throw new System.ArgumentNullException(nameof(blockMeshPresentation));
             LevelAuthoringCore core = model.Core;
             bool modularBoardBuilt = TryBuildModularBoard(model, layout, root, boardCellPrefab);
             foreach (CellDefinitionData cell in core.CreateBoardSnapshot().Cells)
@@ -74,7 +77,8 @@ namespace ColorBlockEscape.Runtime.Authoring
             {
                 foreach (BlockRuntimeState block in runtime.Blocks)
                     views.Add(block.Id, BlockView(block.Id, block.CommittedOrigin,
-                        block.Footprint.Offsets, block.Color, layout, root));
+                        block.Footprint.Offsets, block.Color, layout, root,
+                        blockMeshPresentation));
             }
             else
             {
@@ -82,7 +86,7 @@ namespace ColorBlockEscape.Runtime.Authoring
                 {
                     model.TryGetBlockColor(block.Id, out ColorIdentity color);
                     views.Add(block.Id, BlockView(block.Id, block.Origin,
-                        block.Offsets, color, layout, root));
+                        block.Offsets, color, layout, root, blockMeshPresentation));
                 }
             }
             return views;
@@ -152,14 +156,38 @@ namespace ColorBlockEscape.Runtime.Authoring
 
         private static Transform BlockView(string id, GridCoordinate origin,
             IReadOnlyList<GridCoordinate> offsets, ColorIdentity color,
-            GridWorldLayout layout, Transform parent)
+            GridWorldLayout layout, Transform parent,
+            ColorBlockEscapeBlockMeshPresentation blockMeshPresentation)
         {
             GameObject block = new(id);
             block.transform.SetParent(parent, false);
             block.transform.position = layout.GridToWorldPosition(origin) + Vector3.back * 0.2f;
-            foreach (GridCoordinate offset in offsets)
-                Cube("Block cell", new Vector3(offset.X + 0.5f, offset.Y + 0.5f, 0f),
-                    new Vector3(0.94f, 0.94f, 0.24f), Tint(color), block.transform, true);
+            FootprintMeshGenerationResult generated =
+                blockMeshPresentation.GetOrCreate(offsets, layout);
+            if (!generated.Success)
+            {
+                Debug.LogWarning(
+                    $"Block '{id}' uses fallback cells because unified mesh generation failed: " +
+                    generated.FailureReason);
+                Color fallbackTint = Tint(color);
+                float anchorOffset = layout.CellAnchor == GridCellAnchor.Corner ? 0.5f : 0f;
+                for (int i = 0; i < offsets.Count; i++)
+                {
+                    GridCoordinate offset = offsets[i];
+                    Cube("Block fallback cell",
+                        new Vector3((offset.X + anchorOffset) * layout.CellSize.x,
+                            (offset.Y + anchorOffset) * layout.CellSize.y, 0f),
+                        new Vector3(layout.CellSize.x * 0.94f,
+                            layout.CellSize.y * 0.94f, blockMeshPresentation.Depth),
+                        fallbackTint, block.transform, true);
+                }
+                return block.transform;
+            }
+
+            MeshFilter filter = block.AddComponent<MeshFilter>();
+            filter.sharedMesh = generated.Mesh;
+            MeshRenderer renderer = block.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = MaterialFor(Tint(color));
             return block.transform;
         }
 
@@ -192,13 +220,17 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (local) cube.transform.localPosition = position;
             else cube.transform.position = position;
             cube.transform.localScale = scale;
-            if (!Materials.TryGetValue(color, out Material material) || material == null)
-            {
-                Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
-                material = new Material(shader) { color = color };
-                Materials[color] = material;
-            }
-            cube.GetComponent<Renderer>().sharedMaterial = material;
+            cube.GetComponent<Renderer>().sharedMaterial = MaterialFor(color);
+        }
+
+        private static Material MaterialFor(Color color)
+        {
+            if (Materials.TryGetValue(color, out Material material) && material != null)
+                return material;
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
+            material = new Material(shader) { color = color };
+            Materials[color] = material;
+            return material;
         }
     }
 }

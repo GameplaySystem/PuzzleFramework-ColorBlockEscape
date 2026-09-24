@@ -16,6 +16,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         [SerializeField, Min(0f)] private float _captureDistanceCells = 0.35f;
         [SerializeField, Min(0.01f)] private float _exitSpeedCellsPerSecond = 3f;
         [SerializeField] private ModularBoardCellView _boardCellPrefab;
+        [SerializeField] private ColorBlockEscapeBlockVisualProfile _blockVisualProfile = new();
         private ColorBlockEscapeAuthoringSession _model;
         private ColorBlockEscapeAuthoringTools _tools;
         private GridWorldLayout _layout;
@@ -42,6 +43,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         private string _path;
         private string _message = "Choose a tool and click the board.";
         private Vector2 _scroll;
+        private ColorBlockEscapeBlockMeshPresentation _blockMeshPresentation;
 
         public ColorBlockEscapeAuthoringSession Model => _model;
         public bool IsPlayTesting => _playRoot != null;
@@ -55,10 +57,17 @@ namespace ColorBlockEscape.Runtime.Authoring
             _tools = new ColorBlockEscapeAuthoringTools(_model);
             _layout = new GridWorldLayout(Vector3.zero, Vector2.one,
                 Vector3.right, Vector3.up, GridCellAnchor.Corner);
+            _blockMeshPresentation = new ColorBlockEscapeBlockMeshPresentation(_blockVisualProfile);
             _camera = Camera.main;
             if (_camera == null) { Debug.LogError("CBE editor needs a Main Camera.", this); return; }
             _path = System.IO.Path.Combine(Application.persistentDataPath, "color-block-escape-level.json");
             RefreshEditorView();
+        }
+
+        private void OnDestroy()
+        {
+            _blockMeshPresentation?.Dispose();
+            _blockMeshPresentation = null;
         }
 
         private void Update()
@@ -297,7 +306,8 @@ namespace ColorBlockEscape.Runtime.Authoring
             _playRoot = new GameObject("CBE isolated play-test");
             _playRoot.transform.SetParent(transform, false);
             Dictionary<string, Transform> views = ColorBlockEscapeAuthoringView.Build(
-                _model, level, _layout, _playRoot.transform, _boardCellPrefab);
+                _model, level, _layout, _playRoot.transform, _blockMeshPresentation,
+                _boardCellPrefab);
             ExitCaptureSettings settings = new(
                 _captureOverlapFraction > 0f ? _captureOverlapFraction : 0.70f,
                 Mathf.Max(0f, _captureDistanceCells),
@@ -350,7 +360,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             _authoringRoot = new GameObject("CBE authoring preview");
             _authoringRoot.transform.SetParent(transform, false);
             ColorBlockEscapeAuthoringView.Build(_model, null, _layout, _authoringRoot.transform,
-                _boardCellPrefab);
+                _blockMeshPresentation, _boardCellPrefab);
             if (_camera != null)
             {
                 _camera.orthographic = true;
