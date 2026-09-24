@@ -25,6 +25,8 @@ namespace ColorBlockEscape.Runtime
         private PuzzleFramework.Interaction.InputSystem _input;
         private int _activePointerId = -1;
 
+        public string ActiveBlockId => _movement?.ActiveBlockId;
+
         public void Initialize(ColorBlockEscapeRuntimeLevel level, GridWorldLayout layout,
             Camera sceneCamera, IReadOnlyDictionary<string, Transform> blockViews,
             ExitCaptureSettings exitSettings = null,

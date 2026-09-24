@@ -84,8 +84,8 @@ namespace ColorBlockEscape.Tests
                 Assert.IsTrue(editor.BeginPlayTest());
                 ColorBlockEscapeRuntimeLevel level = editor.PlayTestLevel;
                 Assert.IsNotNull(level);
-                PlainBlockDragAdapter adapter = GameObject.Find("CBE isolated play-test")
-                    .GetComponent<PlainBlockDragAdapter>();
+                PlainBlockDragAdapter adapter = editor.PlayTestController.DragAdapter;
+                Assert.IsNotNull(adapter);
                 Vector2 grab = camera.WorldToScreenPoint(new Vector3(2.5f, 5.5f));
                 adapter.ProcessPointerSample(0, grab, true, true, false);
                 Assert.AreEqual(BlockLifecycle.OnBoard, level.Blocks[0].Lifecycle);

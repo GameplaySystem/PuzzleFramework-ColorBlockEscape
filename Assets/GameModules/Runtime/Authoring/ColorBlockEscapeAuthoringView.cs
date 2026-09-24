@@ -24,53 +24,13 @@ namespace ColorBlockEscape.Runtime.Authoring
             ColorBlockEscapeBlockMeshPresentation blockMeshPresentation,
             ModularBoardCellView boardCellPrefab = null)
         {
+            if (model == null) throw new System.ArgumentNullException(nameof(model));
             if (blockMeshPresentation == null)
                 throw new System.ArgumentNullException(nameof(blockMeshPresentation));
             LevelAuthoringCore core = model.Core;
-            bool modularBoardBuilt = TryBuildModularBoard(model, layout, root, boardCellPrefab);
-            foreach (CellDefinitionData cell in core.CreateBoardSnapshot().Cells)
-            {
-                if (cell.CellState == AuthoredCellState.Inactive) continue;
-                GridCoordinate coordinate = new(cell.Coordinate.X, cell.Coordinate.Y);
-                if (modularBoardBuilt && cell.CellState == AuthoredCellState.Active) continue;
-                Color color = cell.CellState == AuthoredCellState.Blocked
-                    ? new Color(0.20f, 0.23f, 0.29f) : new Color(0.74f, 0.77f, 0.82f);
-                Cube($"Cell {coordinate}", layout.CellCenterToWorld(coordinate) + Vector3.forward * 0.16f,
-                    new Vector3(0.96f, 0.96f, 0.12f), color, root);
-            }
-
-            if (!modularBoardBuilt)
-            {
-                WallGenerationResult boundary = core.CreateBoundary(
-                    state => state == AuthoredCellState.Active);
-                foreach (BoardBoundaryEdge edge in boundary.ExposedEdges)
-                {
-                    if (IsOpening(model.Exits, edge)) continue;
-                    Vector3 center = layout.CellCenterToWorld(edge.CellCoordinate);
-                    bool horizontal = edge.Direction == BoardEdgeDirection.North ||
-                                      edge.Direction == BoardEdgeDirection.South;
-                    Vector3 position = center + (horizontal
-                        ? Vector3.up * (edge.Direction == BoardEdgeDirection.North ? 0.5f : -0.5f)
-                        : Vector3.right * (edge.Direction == BoardEdgeDirection.East ? 0.5f : -0.5f));
-                    Cube("Boundary", position + Vector3.back * 0.03f,
-                        horizontal ? new Vector3(1f, 0.09f, 0.2f) : new Vector3(0.09f, 1f, 0.2f),
-                        new Color(0.37f, 0.43f, 0.53f), root);
-                }
-            }
-
-            foreach (ExitDefinition exit in model.Exits)
-                for (int index = 0; index < exit.Width; index++)
-                {
-                    GridCoordinate cell = ExitBoundaryValidator.EdgeCellAt(exit, index);
-                    Vector3 center = layout.CellCenterToWorld(cell);
-                    bool horizontal = exit.Side == ExitSide.Top || exit.Side == ExitSide.Bottom;
-                    center += horizontal
-                        ? Vector3.up * (exit.Side == ExitSide.Top ? 0.57f : -0.57f)
-                        : Vector3.right * (exit.Side == ExitSide.Right ? 0.57f : -0.57f);
-                    Cube($"Exit {exit.Id}", center + Vector3.back * 0.10f,
-                        horizontal ? new Vector3(0.92f, 0.18f, 0.22f) : new Vector3(0.18f, 0.92f, 0.22f),
-                        Tint(exit.Color), root);
-                }
+            List<ExitViewData> exits = new(model.Exits.Count);
+            foreach (ExitDefinition exit in model.Exits) exits.Add(new ExitViewData(exit));
+            BuildEnvironment(core.CreateBoardSnapshot(), exits, layout, root, boardCellPrefab);
 
             Dictionary<string, Transform> views = new();
             if (runtime != null)
@@ -92,12 +52,82 @@ namespace ColorBlockEscape.Runtime.Authoring
             return views;
         }
 
-        private static bool TryBuildModularBoard(ColorBlockEscapeAuthoringSession model,
-            GridWorldLayout layout, Transform root, ModularBoardCellView boardCellPrefab)
+        /// <summary>Builds gameplay views directly from validated level/runtime data.</summary>
+        public static Dictionary<string, Transform> BuildRuntime(LevelDefinition definition,
+            ColorBlockEscapeRuntimeLevel runtime, GridWorldLayout layout, Transform root,
+            ColorBlockEscapeBlockMeshPresentation blockMeshPresentation,
+            ModularBoardCellView boardCellPrefab = null)
+        {
+            if (definition?.FrameworkData?.Board == null)
+                throw new System.ArgumentNullException(nameof(definition));
+            if (runtime == null) throw new System.ArgumentNullException(nameof(runtime));
+            if (blockMeshPresentation == null)
+                throw new System.ArgumentNullException(nameof(blockMeshPresentation));
+
+            List<ExitViewData> exits = new(runtime.Exits.Count);
+            foreach (ExitRuntimeState exit in runtime.Exits) exits.Add(new ExitViewData(exit));
+            BuildEnvironment(definition.FrameworkData.Board, exits, layout, root, boardCellPrefab);
+            Dictionary<string, Transform> views = new();
+            foreach (BlockRuntimeState block in runtime.Blocks)
+                views.Add(block.Id, BlockView(block.Id, block.CommittedOrigin,
+                    block.Footprint.Offsets, block.Color, layout, root,
+                    blockMeshPresentation));
+            return views;
+        }
+
+        private static void BuildEnvironment(BoardDefinitionData board,
+            IReadOnlyList<ExitViewData> exits, GridWorldLayout layout, Transform root,
+            ModularBoardCellView boardCellPrefab)
+        {
+            WallGenerationResult boundary = CreateActiveBoundary(board);
+            bool modularBoardBuilt = TryBuildModularBoard(
+                boundary, exits, layout, root, boardCellPrefab);
+            foreach (CellDefinitionData cell in board.Cells)
+            {
+                if (cell.CellState == AuthoredCellState.Inactive) continue;
+                GridCoordinate coordinate = new(cell.Coordinate.X, cell.Coordinate.Y);
+                if (modularBoardBuilt && cell.CellState == AuthoredCellState.Active) continue;
+                Color color = cell.CellState == AuthoredCellState.Blocked
+                    ? new Color(0.20f, 0.23f, 0.29f) : new Color(0.74f, 0.77f, 0.82f);
+                Cube($"Cell {coordinate}", layout.CellCenterToWorld(coordinate) +
+                    Vector3.forward * 0.16f, new Vector3(0.96f, 0.96f, 0.12f), color, root);
+            }
+
+            if (!modularBoardBuilt)
+                foreach (BoardBoundaryEdge edge in boundary.ExposedEdges)
+                {
+                    if (IsOpening(exits, edge)) continue;
+                    Vector3 center = layout.CellCenterToWorld(edge.CellCoordinate);
+                    bool horizontal = edge.Direction == BoardEdgeDirection.North ||
+                                      edge.Direction == BoardEdgeDirection.South;
+                    Vector3 position = center + (horizontal
+                        ? Vector3.up * (edge.Direction == BoardEdgeDirection.North ? 0.5f : -0.5f)
+                        : Vector3.right * (edge.Direction == BoardEdgeDirection.East ? 0.5f : -0.5f));
+                    Cube("Boundary", position + Vector3.back * 0.03f,
+                        horizontal ? new Vector3(1f, 0.09f, 0.2f) : new Vector3(0.09f, 1f, 0.2f),
+                        new Color(0.37f, 0.43f, 0.53f), root);
+                }
+
+            foreach (ExitViewData exit in exits)
+                for (int index = 0; index < exit.Width; index++)
+                {
+                    GridCoordinate cell = ExitCellAt(exit, index);
+                    Vector3 center = layout.CellCenterToWorld(cell);
+                    bool horizontal = exit.Side == ExitSide.Top || exit.Side == ExitSide.Bottom;
+                    center += horizontal
+                        ? Vector3.up * (exit.Side == ExitSide.Top ? 0.57f : -0.57f)
+                        : Vector3.right * (exit.Side == ExitSide.Right ? 0.57f : -0.57f);
+                    Cube($"Exit {exit.Id}", center + Vector3.back * 0.10f,
+                        horizontal ? new Vector3(0.92f, 0.18f, 0.22f) :
+                            new Vector3(0.18f, 0.92f, 0.22f), Tint(exit.Color), root);
+                }
+        }
+
+        private static bool TryBuildModularBoard(WallGenerationResult boundary,
+            IReadOnlyList<ExitViewData> exits, GridWorldLayout layout, Transform root,
+            ModularBoardCellView boardCellPrefab)
         {
             if (boardCellPrefab == null) return false;
-            WallGenerationResult boundary = model.Core.CreateBoundary(
-                state => state == AuthoredCellState.Active);
             ModularBoardVisualPlan plan = new ModularBoardVisualPlanner().CreatePlan(boundary);
             GameObject boardRoot = new("Modular board visuals");
             boardRoot.transform.SetParent(root, false);
@@ -113,14 +143,23 @@ namespace ColorBlockEscape.Runtime.Authoring
 
             Dictionary<GridCoordinate, ModularBoardCellView> byCoordinate = new();
             foreach (ModularBoardCellView cell in cells) byCoordinate[cell.Coordinate] = cell;
-            foreach (ExitDefinition exit in model.Exits)
+            foreach (ExitViewData exit in exits)
                 for (int index = 0; index < exit.Width; index++)
                 {
-                    GridCoordinate coordinate = ExitBoundaryValidator.EdgeCellAt(exit, index);
+                    GridCoordinate coordinate = ExitCellAt(exit, index);
                     if (byCoordinate.TryGetValue(coordinate, out ModularBoardCellView cell))
                         cell.SetBoundaryEdgeVisible(Direction(exit.Side), false);
                 }
             return true;
+        }
+
+        private static WallGenerationResult CreateActiveBoundary(BoardDefinitionData board)
+        {
+            List<GridCoordinate> active = new();
+            foreach (CellDefinitionData cell in board.Cells)
+                if (cell.CellState == AuthoredCellState.Active)
+                    active.Add(new GridCoordinate(cell.Coordinate.X, cell.Coordinate.Y));
+            return new WallGenerationSystem().Generate(active);
         }
 
         private static BoardEdgeDirection Direction(ExitSide side) => side switch
@@ -191,7 +230,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             return block.transform;
         }
 
-        private static bool IsOpening(IReadOnlyList<ExitDefinition> exits, BoardBoundaryEdge edge)
+        private static bool IsOpening(IReadOnlyList<ExitViewData> exits, BoardBoundaryEdge edge)
         {
             ExitSide side = edge.Direction switch
             {
@@ -200,13 +239,18 @@ namespace ColorBlockEscape.Runtime.Authoring
                 BoardEdgeDirection.West => ExitSide.Left,
                 _ => ExitSide.Right
             };
-            foreach (ExitDefinition exit in exits)
+            foreach (ExitViewData exit in exits)
                 if (exit.Side == side)
                     for (int index = 0; index < exit.Width; index++)
-                        if (ExitBoundaryValidator.EdgeCellAt(exit, index) == edge.CellCoordinate)
+                        if (ExitCellAt(exit, index) == edge.CellCoordinate)
                             return true;
             return false;
         }
+
+        private static GridCoordinate ExitCellAt(ExitViewData exit, int index) =>
+            exit.Side == ExitSide.Top || exit.Side == ExitSide.Bottom
+                ? exit.StartCell.Offset(index, 0)
+                : exit.StartCell.Offset(0, index);
 
         private static void Cube(string name, Vector3 position, Vector3 scale,
             Color color, Transform parent, bool local = false)
@@ -231,6 +275,33 @@ namespace ColorBlockEscape.Runtime.Authoring
             material = new Material(shader) { color = color };
             Materials[color] = material;
             return material;
+        }
+
+        private readonly struct ExitViewData
+        {
+            public ExitViewData(ExitDefinition exit)
+            {
+                Id = exit.Id;
+                Side = exit.Side;
+                StartCell = new GridCoordinate(exit.StartCell.X, exit.StartCell.Y);
+                Width = exit.Width;
+                Color = exit.Color;
+            }
+
+            public ExitViewData(ExitRuntimeState exit)
+            {
+                Id = exit.Id;
+                Side = exit.Side;
+                StartCell = exit.StartCell;
+                Width = exit.Width;
+                Color = exit.Color;
+            }
+
+            public string Id { get; }
+            public ExitSide Side { get; }
+            public GridCoordinate StartCell { get; }
+            public int Width { get; }
+            public ColorIdentity Color { get; }
         }
     }
 }

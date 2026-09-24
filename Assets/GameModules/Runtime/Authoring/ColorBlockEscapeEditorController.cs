@@ -23,8 +23,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         private Camera _camera;
         private GameObject _authoringRoot;
         private GameObject _playRoot;
-        private ColorBlockEscapeRuntimeLevel _playTestLevel;
-        private ColorBlockEscapeOutcomeSession _playTestOutcome;
+        private ColorBlockEscapeRuntimeController _playTestController;
         private GameObject _previewRoot;
         private string _previewKey;
         private ColorBlockEscapeAuthoringMode _mode;
@@ -47,8 +46,9 @@ namespace ColorBlockEscape.Runtime.Authoring
 
         public ColorBlockEscapeAuthoringSession Model => _model;
         public bool IsPlayTesting => _playRoot != null;
-        public ColorBlockEscapeRuntimeLevel PlayTestLevel => _playTestLevel;
-        public ColorBlockEscapeOutcomeSession PlayTestOutcome => _playTestOutcome;
+        public ColorBlockEscapeRuntimeLevel PlayTestLevel => _playTestController?.Level;
+        public ColorBlockEscapeOutcomeSession PlayTestOutcome => _playTestController?.Outcome;
+        public ColorBlockEscapeRuntimeController PlayTestController => _playTestController;
         public ColorBlockEscapeAuthoringMode CurrentMode => _mode;
 
         private void Awake()
@@ -153,7 +153,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             GUILayout.Label(_message);
             if (IsPlayTesting)
             {
-                GUILayout.Label($"Time: {_playTestOutcome.RemainingSeconds:0.0}s | {_playTestOutcome.State}");
+                GUILayout.Label($"Time: {PlayTestOutcome.RemainingSeconds:0.0}s | {PlayTestOutcome.State}");
                 GUILayout.Label("Exit capture and outcomes are active; chipper presentation is a later checkpoint.");
                 if (GUILayout.Button("Restart play-test")) RestartPlayTest();
                 if (GUILayout.Button("Return to editor")) ReturnFromPlayTest();
@@ -297,23 +297,24 @@ namespace ColorBlockEscape.Runtime.Authoring
         public bool BeginPlayTest()
         {
             if (IsPlayTesting) return true;
-            if (!_model.TryBeginPlayTest(out ColorBlockEscapeRuntimeLevel level, out string failure))
+            if (!_model.TryCreateLevel(out LevelDefinition definition, out string failure))
             { _message = failure; return false; }
-            _playTestLevel = level;
-            _playTestOutcome = new ColorBlockEscapeOutcomeSession(level);
             _authoringRoot.SetActive(false);
             ClearPreview();
             _playRoot = new GameObject("CBE isolated play-test");
             _playRoot.transform.SetParent(transform, false);
-            Dictionary<string, Transform> views = ColorBlockEscapeAuthoringView.Build(
-                _model, level, _layout, _playRoot.transform, _blockMeshPresentation,
-                _boardCellPrefab);
             ExitCaptureSettings settings = new(
                 _captureOverlapFraction > 0f ? _captureOverlapFraction : 0.70f,
                 Mathf.Max(0f, _captureDistanceCells),
                 _exitSpeedCellsPerSecond > 0f ? _exitSpeedCellsPerSecond : 3f);
-            _playRoot.AddComponent<PlainBlockDragAdapter>().Initialize(level, _layout, _camera,
-                views, settings, _playTestOutcome);
+            _playTestController = _playRoot.AddComponent<ColorBlockEscapeRuntimeController>();
+            if (!_playTestController.TryStart(definition, _camera, _boardCellPrefab,
+                    _blockMeshPresentation, settings, showHud: false))
+            {
+                _message = _playTestController.StatusMessage;
+                ReturnFromPlayTest();
+                return false;
+            }
             _message = "Play-test running; editor data remains unchanged.";
             return true;
         }
@@ -324,8 +325,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             _playRoot.SetActive(false);
             Destroy(_playRoot);
             _playRoot = null;
-            _playTestLevel = null;
-            _playTestOutcome = null;
+            _playTestController = null;
             _authoringRoot.SetActive(true);
             _message = "Returned to the unchanged authoring session.";
         }
@@ -333,8 +333,11 @@ namespace ColorBlockEscape.Runtime.Authoring
         /// <summary>Builds a fresh runtime level and timer from the unchanged authoring data.</summary>
         public bool RestartPlayTest()
         {
-            ReturnFromPlayTest();
-            return BeginPlayTest();
+            if (_playTestController == null) return BeginPlayTest();
+            bool restarted = _playTestController.RestartCurrentLevel();
+            _message = restarted ? "Play-test restarted from authored data." :
+                _playTestController.StatusMessage;
+            return restarted;
         }
 
         private void Apply(AuthoringEditResult result)

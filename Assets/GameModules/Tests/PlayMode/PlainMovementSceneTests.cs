@@ -11,6 +11,8 @@ namespace ColorBlockEscape.Tests
         [UnityTest]
         public IEnumerator CheckpointFixtureRendersAndMovesSubcellBeforeRelease()
         {
+            foreach (Camera existing in Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
+                existing.gameObject.tag = "Untagged";
             GameObject cameraObject = new("Movement test camera");
             cameraObject.tag = "MainCamera";
             Camera camera = cameraObject.AddComponent<Camera>();

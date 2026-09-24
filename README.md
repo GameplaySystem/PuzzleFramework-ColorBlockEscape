@@ -20,17 +20,21 @@ Drop The Man.
 - JSON payload codec plus validated runtime construction
 - a play-mode level editor built on the shared live framework authoring session
 - modular board visuals reused from DTM with validated exit wall openings
-- editor-to-runtime play-test handoff using the same construction and gameplay path
+- generated footprint meshes shared by editor and runtime block views
+- a standalone gameplay scene and editor play-test that use the same runtime composition path
 
 ## Gameplay / Demo
 
-The current gameplay path starts from the level editor:
+The standalone gameplay path is ready to run:
 
-1. Open `Assets/Scenes/ColorBlockEscapeLevelEditor.unity`.
+1. Open `Assets/Scenes/ColorBlockEscapeGameplay.unity`.
 2. Enter Play Mode.
-3. Author at least one block, one valid matching exit, and a positive timer.
-4. Select **Play-test authored level** in the editor HUD.
-5. Drag blocks with the primary mouse button.
+3. Drag blocks with the primary mouse button and clear them through their matching exits.
+4. Use the HUD to inspect the timer/result or restart the authored level.
+
+To author or change levels, open `Assets/Scenes/ColorBlockEscapeLevelEditor.unity`. Its
+**Play-test authored level** action passes a detached authored snapshot into the same runtime host
+used by the standalone scene.
 
 `Assets/Scenes/PlainMovementCheckpoint.unity` remains a diagnostic scene for plain movement. It
 does not include exit admission or outcomes and is not the main gameplay demo.
@@ -45,7 +49,7 @@ does not include exit admission or outcomes and is not the main gameplay demo.
 | CBE exit capture | Owns color matching, span fit, alignment threshold, corridor clearance, busy exits, capture, and progressive release. |
 | Runtime flow | Uses framework timer/game-state services while CBE owns completion, timeout, and exact-tie precedence. |
 | Level data and construction | Framework transports generic level data; CBE interprets block, exit, color, footprint, and timer payloads. |
-| Presentation | Framework builds modular board cells; CBE chooses exit openings and currently renders placeholder block/exit geometry. |
+| Presentation | Framework builds modular board cells and generated footprint meshes; CBE chooses exit openings, colors, and visual profiles. |
 | Level editor | Shared live authoring core plus CBE-specific block, obstacle, exit, timer, codec, and play-test tools. |
 
 ## Architecture Diagram
@@ -63,7 +67,8 @@ flowchart LR
     Timer[Framework countdown timer] --> Outcome
     Authoring[CBE editor tools] --> Session[Framework LevelAuthoringCore]
     Session --> Codec[CBE JSON payload codec]
-    Codec --> Build[Validated runtime builder]
+    Codec --> Host[CBE runtime composition host]
+    Host --> Build[Validated runtime builder]
     Build --> Board
 ```
 
@@ -129,11 +134,14 @@ flowchart LR
     Payload --> JSON[Serialized level]
     JSON --> Staged[Staged load + validation]
     Staged --> Runtime[Runtime construction]
-    Runtime --> Playtest[Isolated authored-level play-test]
+    Runtime --> Host[Shared CBE runtime composition host]
+    Host --> Playtest[Editor play-test]
+    Host --> Gameplay[Standalone gameplay scene]
 ```
 
-Editor preview objects do not become gameplay authority. Play-test builds a fresh runtime level
-through the same codec, validation, and construction path used by loaded data.
+Editor preview objects do not become gameplay authority. Play-test and standalone gameplay each
+build a fresh runtime level through the same validation, construction, view-wiring, input, and
+outcome path.
 
 ## Technical Decisions
 
@@ -165,13 +173,15 @@ Assets/
   GameModules/
     Runtime/
       Authoring/             CBE editor session, tools, controller, views
-      ColorBlockEscape*.cs   Payload, construction, capture, outcome
+      ColorBlockEscape*.cs   Payload, construction, composition, capture, outcome
       PlainBlock*.cs         Continuous movement and scene adapter
     Tests/
       EditMode/              Movement, construction, capture, outcome, editor
       PlayMode/              Scene movement and authored play-test coverage
   RuntimeAssets/Board/       Reused configured modular board assets
+  Levels/                    Authored standalone gameplay JSON
   Scenes/
+    ColorBlockEscapeGameplay.unity
     ColorBlockEscapeLevelEditor.unity
     PlainMovementCheckpoint.unity
 Packages/
@@ -197,15 +207,16 @@ Completed checkpoints:
 - matching-color exit capture and progressive occupancy release
 - timer and outcome integration
 - keyboard-focused authoring workflow and DTM modular-board reuse
+- generated footprint meshes used by editor and runtime block views
+- standalone authored-level gameplay host with HUD and clean restart
 
 In progress or deferred:
 
-- owner-authored basic-shape block prefabs for editor/runtime views
 - chipper and fragment-scatter presentation
 - pooling for chipper fragments
 - final UI, tuning, and mobile/device validation
 
-The current CBE verification passes **37/37 Edit Mode tests** and **4/4 Play Mode tests**.
+The current CBE verification passes **38/38 Edit Mode tests** and **6/6 Play Mode tests**.
 
 ## What I Built / Role
 
@@ -218,8 +229,8 @@ and editor systems, and own the framework integration, validation strategy, and 
 1. Clone the repository.
 2. Open it with Unity `6000.3.17f1`.
 3. Allow Unity Package Manager to resolve the pinned Puzzle Framework revision.
-4. Open `Assets/Scenes/ColorBlockEscapeLevelEditor.unity`.
-5. Enter Play Mode, author a valid block/exit pair, and choose **Play-test authored level**.
+4. Open `Assets/Scenes/ColorBlockEscapeGameplay.unity` and enter Play Mode.
+5. Use `Assets/Scenes/ColorBlockEscapeLevelEditor.unity` when authoring or play-testing new JSON.
 
 Git must be installed and available to Unity. The project does not require a neighboring framework
 checkout because `Packages/manifest.json` pins the published package revision.
