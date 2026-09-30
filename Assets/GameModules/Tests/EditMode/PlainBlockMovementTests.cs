@@ -53,6 +53,92 @@ namespace ColorBlockEscape.Tests
         }
 
         [Test]
+        public void DiagonalDragAlongBlockerPreservesTheClearAxis()
+        {
+            LevelAuthoringCore core = Authoring();
+            core.TrySetCellState(new GridCoordinate(2, 2), AuthoredCellState.Blocked);
+            ColorBlockEscapeRuntimeLevel level = Build(
+                new[] { Block("moving", 1, 1, (0, 0)) }, core);
+            PlainBlockMovement movement = new(level, Layout);
+            movement.TryBegin("moving", out _);
+
+            PlainBlockMoveResult result = movement.Move(new Vector3(3f, 3f));
+
+            Assert.IsTrue(result.WasBlocked);
+            Assert.That(result.WorldPosition.x, Is.EqualTo(3f).Within(0.0001f));
+            Assert.That(result.WorldPosition.y, Is.EqualTo(1f).Within(0.0001f));
+            Assert.IsFalse(movement.End().WasBlocked);
+            Assert.AreEqual(new GridCoordinate(3, 1), level.Blocks[0].CommittedOrigin);
+        }
+
+        [Test]
+        public void FastDiagonalFallbackCannotTunnelThroughBlockedAxes()
+        {
+            LevelAuthoringCore core = Authoring();
+            core.TrySetCellState(new GridCoordinate(3, 3), AuthoredCellState.Blocked);
+            core.TrySetCellState(new GridCoordinate(3, 1), AuthoredCellState.Blocked);
+            core.TrySetCellState(new GridCoordinate(1, 3), AuthoredCellState.Blocked);
+            ColorBlockEscapeRuntimeLevel level = Build(
+                new[] { Block("moving", 1, 1, (0, 0)) }, core);
+            PlainBlockMovement movement = new(level, Layout);
+            movement.TryBegin("moving", out _);
+
+            PlainBlockMoveResult result = movement.Move(new Vector3(5f, 5f));
+
+            Assert.IsTrue(result.WasBlocked);
+            Assert.That(result.WorldPosition.x, Is.LessThan(3f));
+            Assert.That(result.WorldPosition.y, Is.LessThan(3f));
+            Assert.AreNotEqual(new Vector3(5f, 1f), result.WorldPosition);
+            Assert.AreNotEqual(new Vector3(1f, 5f), result.WorldPosition);
+        }
+
+        [Test]
+        public void BoardClampKeepsTangentialMovementAtTheEdge()
+        {
+            ColorBlockEscapeRuntimeLevel level = Build(
+                new[] { Block("moving", 1, 1, (0, 0)) });
+            PlainBlockMovement movement = new(level, Layout);
+            movement.TryBegin("moving", out _);
+
+            PlainBlockMoveResult result = movement.Move(new Vector3(-10f, 4f));
+
+            Assert.IsTrue(result.WasBlocked);
+            Assert.That(result.WorldPosition.x, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(result.WorldPosition.y, Is.EqualTo(4f).Within(0.0001f));
+            Assert.IsFalse(movement.End().WasBlocked);
+        }
+
+        [Test]
+        public void ShapeAwareInsetAllowsNoisyDragThroughExactWidthCorridor()
+        {
+            LevelAuthoringCore core = Authoring();
+            for (int x = 2; x <= 5; x++)
+                core.TrySetCellState(new GridCoordinate(x, 3), AuthoredCellState.Blocked);
+
+            ColorBlockEscapeRuntimeLevel tolerantLevel = Build(
+                new[] { Block("moving", 0, 2, (0, 0)) }, core);
+            PlainBlockMovement tolerant = new(tolerantLevel, Layout);
+            tolerant.TryBegin("moving", out _);
+            Assert.IsFalse(tolerant.Move(new Vector3(1f, 2.04f)).WasBlocked);
+            PlainBlockMoveResult through = tolerant.Move(new Vector3(5f, 2.04f));
+            Assert.That(through.WorldPosition.x, Is.EqualTo(5f).Within(0.0001f));
+
+            ColorBlockEscapeRuntimeLevel exactLevel = Build(
+                new[] { Block("moving", 0, 2, (0, 0)) }, core);
+            PlainBlockMovement exact = new(exactLevel, Layout, null, 0f);
+            exact.TryBegin("moving", out _);
+            Assert.IsFalse(exact.Move(new Vector3(1f, 2.04f)).WasBlocked);
+            PlainBlockMoveResult stopped = exact.Move(new Vector3(5f, 2.04f));
+            Assert.That(stopped.WorldPosition.x, Is.LessThan(2f));
+
+            PlainBlockMoveResult released = tolerant.End();
+            Assert.IsFalse(released.WasBlocked, released.FailureReason);
+            Assert.AreEqual(new GridCoordinate(5, 2), tolerantLevel.Blocks[0].CommittedOrigin);
+            Assert.IsTrue(tolerantLevel.FrameworkContext.CellOccupancySystem.IsOccupied(
+                new GridCoordinate(5, 2)));
+        }
+
+        [Test]
         public void FastDragStopsAtBlockedAndInactiveCellsRatherThanTunneling()
         {
             LevelAuthoringCore core = Authoring();
@@ -65,7 +151,8 @@ namespace ColorBlockEscape.Tests
             PlainBlockMoveResult horizontal = movement.Move(new Vector3(6f, 1f));
             Assert.IsTrue(horizontal.WasBlocked);
             Assert.That(horizontal.WorldPosition.x, Is.GreaterThan(1.9f));
-            Assert.That(horizontal.WorldPosition.x, Is.LessThanOrEqualTo(2.001f));
+            Assert.That(horizontal.WorldPosition.x, Is.LessThanOrEqualTo(
+                2.001f + PlainBlockMovement.DefaultDragClearanceInsetCells));
             PlainBlockMoveResult vertical = movement.Move(new Vector3(horizontal.WorldPosition.x, 5f));
             Assert.IsTrue(vertical.WasBlocked);
             Assert.That(vertical.WorldPosition.y, Is.LessThan(3f));
@@ -85,7 +172,8 @@ namespace ColorBlockEscape.Tests
             movement.TryBegin("moving", out _);
             PlainBlockMoveResult result = movement.Move(new Vector3(5f, 1f));
             Assert.IsTrue(result.WasBlocked);
-            Assert.That(result.WorldPosition.x, Is.LessThanOrEqualTo(2.001f));
+            Assert.That(result.WorldPosition.x, Is.LessThanOrEqualTo(
+                2.001f + PlainBlockMovement.DefaultDragClearanceInsetCells));
             movement.End();
             Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(4, 1)));
         }
@@ -105,7 +193,8 @@ namespace ColorBlockEscape.Tests
             Assert.IsFalse(left.WasBlocked, left.FailureReason);
             PlainBlockMoveResult right = movement.Move(new Vector3(1.6f, 1f));
             Assert.IsTrue(right.WasBlocked);
-            Assert.That(right.WorldPosition.x, Is.LessThanOrEqualTo(1.001f));
+            Assert.That(right.WorldPosition.x, Is.LessThanOrEqualTo(
+                1.001f + PlainBlockMovement.DefaultDragClearanceInsetCells));
             Assert.AreEqual(new Vector3(1f, 1f), movement.End().WorldPosition);
         }
 

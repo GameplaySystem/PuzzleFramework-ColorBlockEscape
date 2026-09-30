@@ -15,6 +15,8 @@ namespace ColorBlockEscape.Runtime
     public sealed class PlainBlockDragAdapter : MonoBehaviour
     {
         private const float BlockViewDepth = -0.2f;
+        [SerializeField, Range(0f, 0.45f)]
+        private float dragClearanceInsetCells = PlainBlockMovement.DefaultDragClearanceInsetCells;
         private ColorBlockEscapeRuntimeLevel _level;
         private GridWorldLayout _layout;
         private Camera _camera;
@@ -38,7 +40,8 @@ namespace ColorBlockEscape.Runtime
             _exitCapture = exitSettings == null ? null :
                 new ColorBlockEscapeExitCapture(level, layout, exitSettings);
             _outcome = outcome;
-            _movement = new PlainBlockMovement(level, layout, _exitCapture);
+            _movement = new PlainBlockMovement(level, layout, _exitCapture,
+                dragClearanceInsetCells);
             _views = new Dictionary<string, Transform>(blockViews);
             _input = new PuzzleFramework.Interaction.InputSystem();
         }
