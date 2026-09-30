@@ -16,10 +16,7 @@ namespace ColorBlockEscape.Tests
             GameObject cameraObject = new("Movement test camera");
             cameraObject.tag = "MainCamera";
             Camera camera = cameraObject.AddComponent<Camera>();
-            camera.orthographic = true;
-            camera.orthographicSize = 4.7f;
             camera.pixelRect = new Rect(0f, 0f, 800f, 600f);
-            cameraObject.transform.position = new Vector3(3.5f, 3f, -10f);
             GameObject fixture = new("Movement fixture");
             fixture.AddComponent<PlainMovementCheckpointBootstrap>();
 
@@ -30,8 +27,13 @@ namespace ColorBlockEscape.Tests
             Assert.IsNotNull(block);
             Assert.AreEqual(3, block.childCount);
 
-            Vector2 grab = camera.WorldToScreenPoint(new Vector3(1.4f, 1.4f));
-            Vector2 moved = camera.WorldToScreenPoint(new Vector3(1.7f, 1.4f));
+            Assert.IsFalse(camera.orthographic);
+            Assert.That(camera.transform.eulerAngles.x,
+                Is.EqualTo(ColorBlockEscapeBoardCamera.DefaultPitchDegrees).Within(0.01f));
+            Assert.That(block.position.y, Is.GreaterThan(0f));
+            Assert.That(block.position.z, Is.EqualTo(1f).Within(0.001f));
+            Vector2 grab = camera.WorldToScreenPoint(World(1.4f, 1.4f));
+            Vector2 moved = camera.WorldToScreenPoint(World(1.7f, 1.4f));
             adapter.ProcessPointerSample(0, grab, true, true, false);
             adapter.ProcessPointerSample(0, moved, false, true, false);
             Assert.That(block.position.x, Is.EqualTo(1.3f).Within(0.001f));
@@ -41,5 +43,9 @@ namespace ColorBlockEscape.Tests
             Object.Destroy(fixture);
             Object.Destroy(cameraObject);
         }
+
+        private static Vector3 World(float x, float y) =>
+            ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero)
+                .BoardLocalToWorld(new Vector2(x, y));
     }
 }

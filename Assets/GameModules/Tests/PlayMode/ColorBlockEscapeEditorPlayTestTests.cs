@@ -29,7 +29,7 @@ namespace ColorBlockEscape.Tests
             {
                 Assert.IsTrue(editor.ProcessModeShortcut(Key.O));
                 Assert.AreEqual(ColorBlockEscapeAuthoringMode.ToggleObstacle, editor.CurrentMode);
-                Ray cell = new(new Vector3(2.5f, 2.5f, -5f), Vector3.forward);
+                Ray cell = new(new Vector3(2.5f, 5f, 2.5f), Vector3.down);
                 Assert.IsTrue(editor.ProcessAuthoringClick(cell, erase: false));
                 Assert.AreEqual(AuthoredCellState.Blocked,
                     editor.Model.Core.GetCellState(new GridCoordinate(2, 2)));
@@ -50,7 +50,7 @@ namespace ColorBlockEscape.Tests
                 Assert.AreEqual(0, editor.Model.Core.Items.Count);
 
                 Assert.IsTrue(editor.ProcessModeShortcut(Key.E));
-                Ray edge = new(new Vector3(1.5f, 6.05f, -5f), Vector3.forward);
+                Ray edge = new(new Vector3(1.5f, 5f, 6.05f), Vector3.down);
                 Assert.IsTrue(editor.ProcessAuthoringClick(edge, erase: false));
                 Assert.AreEqual(1, editor.Model.Exits.Count);
                 Assert.IsTrue(editor.ProcessAuthoringClick(edge, erase: true));
@@ -86,10 +86,10 @@ namespace ColorBlockEscape.Tests
                 Assert.IsNotNull(level);
                 PlainBlockDragAdapter adapter = editor.PlayTestController.DragAdapter;
                 Assert.IsNotNull(adapter);
-                Vector2 grab = camera.WorldToScreenPoint(new Vector3(2.5f, 5.5f));
+                Vector2 grab = camera.WorldToScreenPoint(World(2.5f, 5.5f));
                 adapter.ProcessPointerSample(0, grab, true, true, false);
                 Assert.AreEqual(BlockLifecycle.OnBoard, level.Blocks[0].Lifecycle);
-                Vector2 outward = camera.WorldToScreenPoint(new Vector3(2.5f, 6.6f));
+                Vector2 outward = camera.WorldToScreenPoint(World(2.5f, 6.6f));
                 adapter.ProcessPointerSample(0, outward, false, true, false);
                 Assert.AreEqual(BlockLifecycle.Exiting, level.Blocks[0].Lifecycle);
                 Assert.IsTrue(level.Exits[0].IsBusy);
@@ -105,6 +105,9 @@ namespace ColorBlockEscape.Tests
                 Assert.AreEqual(BlockLifecycle.OnBoard, editor.PlayTestLevel.Blocks[0].Lifecycle);
                 Assert.IsFalse(editor.PlayTestLevel.Exits[0].IsBusy);
                 editor.ReturnFromPlayTest();
+                Assert.IsFalse(camera.orthographic);
+                Assert.That(camera.transform.eulerAngles.x,
+                    Is.EqualTo(ColorBlockEscapeBoardCamera.DefaultPitchDegrees).Within(0.01f));
                 Assert.IsTrue(editor.Model.Core.TryGetItem("block", out AuthoredFootprint item));
                 Assert.AreEqual(new GridCoordinate(2, 5), item.Origin);
             }
@@ -150,5 +153,9 @@ namespace ColorBlockEscape.Tests
             }
             yield return null;
         }
+
+        private static Vector3 World(float x, float y) =>
+            ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero)
+                .BoardLocalToWorld(new Vector2(x, y));
     }
 }

@@ -10,7 +10,8 @@ namespace ColorBlockEscape.Tests
 {
     public sealed class PlainBlockMovementTests
     {
-        private static readonly GridWorldLayout Layout = new(Vector3.zero, Vector2.one);
+        private static readonly GridWorldLayout Layout =
+            ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
 
         [Test]
         public void DragUsesSubcellPositionsAndReleaseTransfersWholeFootprint()
@@ -20,17 +21,17 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(movement.TryBegin("moving", out Vector3 start));
             Assert.AreEqual(1f, start.x);
 
-            PlainBlockMoveResult preview = movement.Move(new Vector3(1.35f, 1f));
+            PlainBlockMoveResult preview = movement.Move(World(1.35f, 1f));
             Assert.IsFalse(preview.WasBlocked, preview.FailureReason);
             Assert.That(preview.WorldPosition.x, Is.EqualTo(1.35f).Within(0.0001f));
             Assert.That(level.Blocks[0].ContinuousOrigin.x, Is.EqualTo(1.35f).Within(0.0001f));
             Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(1, 1)));
 
-            movement.Move(new Vector3(1.8f, 1f));
+            movement.Move(World(1.8f, 1f));
             PlainBlockMoveResult released = movement.End();
             Assert.IsFalse(released.WasBlocked, released.FailureReason);
             Assert.AreEqual(new GridCoordinate(2, 1), level.Blocks[0].CommittedOrigin);
-            Assert.AreEqual(new Vector3(2f, 1f), released.WorldPosition);
+            Assert.AreEqual(World(2f, 1f), released.WorldPosition);
             Assert.IsFalse(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(1, 1)));
             Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(2, 1)));
             Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(3, 1)));
@@ -43,10 +44,10 @@ namespace ColorBlockEscape.Tests
                 (0, 0), (1, 0), (0, 1), (1, 1)) });
             PlainBlockMovement movement = new(level, Layout);
             movement.TryBegin("moving", out _);
-            PlainBlockMoveResult left = movement.Move(new Vector3(-100f, 1f));
+            PlainBlockMoveResult left = movement.Move(World(-100f, 1f));
             Assert.IsTrue(left.WasBlocked);
             Assert.That(left.WorldPosition.x, Is.EqualTo(0f).Within(0.0001f));
-            PlainBlockMoveResult right = movement.Move(new Vector3(100f, 1f));
+            PlainBlockMoveResult right = movement.Move(World(100f, 1f));
             Assert.IsTrue(right.WasBlocked);
             Assert.That(right.WorldPosition.x, Is.EqualTo(5f).Within(0.0001f));
             Assert.IsFalse(movement.End().WasBlocked);
@@ -62,11 +63,11 @@ namespace ColorBlockEscape.Tests
             PlainBlockMovement movement = new(level, Layout);
             movement.TryBegin("moving", out _);
 
-            PlainBlockMoveResult result = movement.Move(new Vector3(3f, 3f));
+            PlainBlockMoveResult result = movement.Move(World(3f, 3f));
 
             Assert.IsTrue(result.WasBlocked);
             Assert.That(result.WorldPosition.x, Is.EqualTo(3f).Within(0.0001f));
-            Assert.That(result.WorldPosition.y, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(Local(result.WorldPosition).y, Is.EqualTo(1f).Within(0.0001f));
             Assert.IsFalse(movement.End().WasBlocked);
             Assert.AreEqual(new GridCoordinate(3, 1), level.Blocks[0].CommittedOrigin);
         }
@@ -83,13 +84,13 @@ namespace ColorBlockEscape.Tests
             PlainBlockMovement movement = new(level, Layout);
             movement.TryBegin("moving", out _);
 
-            PlainBlockMoveResult result = movement.Move(new Vector3(5f, 5f));
+            PlainBlockMoveResult result = movement.Move(World(5f, 5f));
 
             Assert.IsTrue(result.WasBlocked);
             Assert.That(result.WorldPosition.x, Is.LessThan(3f));
-            Assert.That(result.WorldPosition.y, Is.LessThan(3f));
-            Assert.AreNotEqual(new Vector3(5f, 1f), result.WorldPosition);
-            Assert.AreNotEqual(new Vector3(1f, 5f), result.WorldPosition);
+            Assert.That(Local(result.WorldPosition).y, Is.LessThan(3f));
+            Assert.AreNotEqual(World(5f, 1f), result.WorldPosition);
+            Assert.AreNotEqual(World(1f, 5f), result.WorldPosition);
         }
 
         [Test]
@@ -100,11 +101,11 @@ namespace ColorBlockEscape.Tests
             PlainBlockMovement movement = new(level, Layout);
             movement.TryBegin("moving", out _);
 
-            PlainBlockMoveResult result = movement.Move(new Vector3(-10f, 4f));
+            PlainBlockMoveResult result = movement.Move(World(-10f, 4f));
 
             Assert.IsTrue(result.WasBlocked);
             Assert.That(result.WorldPosition.x, Is.EqualTo(0f).Within(0.0001f));
-            Assert.That(result.WorldPosition.y, Is.EqualTo(4f).Within(0.0001f));
+            Assert.That(Local(result.WorldPosition).y, Is.EqualTo(4f).Within(0.0001f));
             Assert.IsFalse(movement.End().WasBlocked);
         }
 
@@ -119,16 +120,16 @@ namespace ColorBlockEscape.Tests
                 new[] { Block("moving", 0, 2, (0, 0)) }, core);
             PlainBlockMovement tolerant = new(tolerantLevel, Layout);
             tolerant.TryBegin("moving", out _);
-            Assert.IsFalse(tolerant.Move(new Vector3(1f, 2.04f)).WasBlocked);
-            PlainBlockMoveResult through = tolerant.Move(new Vector3(5f, 2.04f));
+            Assert.IsFalse(tolerant.Move(World(1f, 2.04f)).WasBlocked);
+            PlainBlockMoveResult through = tolerant.Move(World(5f, 2.04f));
             Assert.That(through.WorldPosition.x, Is.EqualTo(5f).Within(0.0001f));
 
             ColorBlockEscapeRuntimeLevel exactLevel = Build(
                 new[] { Block("moving", 0, 2, (0, 0)) }, core);
             PlainBlockMovement exact = new(exactLevel, Layout, null, 0f);
             exact.TryBegin("moving", out _);
-            Assert.IsFalse(exact.Move(new Vector3(1f, 2.04f)).WasBlocked);
-            PlainBlockMoveResult stopped = exact.Move(new Vector3(5f, 2.04f));
+            Assert.IsFalse(exact.Move(World(1f, 2.04f)).WasBlocked);
+            PlainBlockMoveResult stopped = exact.Move(World(5f, 2.04f));
             Assert.That(stopped.WorldPosition.x, Is.LessThan(2f));
 
             PlainBlockMoveResult released = tolerant.End();
@@ -148,14 +149,14 @@ namespace ColorBlockEscape.Tests
             PlainBlockMovement movement = new(level, Layout);
             movement.TryBegin("moving", out _);
 
-            PlainBlockMoveResult horizontal = movement.Move(new Vector3(6f, 1f));
+            PlainBlockMoveResult horizontal = movement.Move(World(6f, 1f));
             Assert.IsTrue(horizontal.WasBlocked);
             Assert.That(horizontal.WorldPosition.x, Is.GreaterThan(1.9f));
             Assert.That(horizontal.WorldPosition.x, Is.LessThanOrEqualTo(
                 2.001f + PlainBlockMovement.DefaultDragClearanceInsetCells));
-            PlainBlockMoveResult vertical = movement.Move(new Vector3(horizontal.WorldPosition.x, 5f));
+            PlainBlockMoveResult vertical = movement.Move(World(Local(horizontal.WorldPosition).x, 5f));
             Assert.IsTrue(vertical.WasBlocked);
-            Assert.That(vertical.WorldPosition.y, Is.LessThan(3f));
+            Assert.That(Local(vertical.WorldPosition).y, Is.LessThan(3f));
             PlainBlockMoveResult release = movement.End();
             Assert.AreEqual(Layout.GridToWorldPosition(level.Blocks[0].CommittedOrigin), release.WorldPosition);
         }
@@ -170,7 +171,7 @@ namespace ColorBlockEscape.Tests
             });
             PlainBlockMovement movement = new(level, Layout);
             movement.TryBegin("moving", out _);
-            PlainBlockMoveResult result = movement.Move(new Vector3(5f, 1f));
+            PlainBlockMoveResult result = movement.Move(World(5f, 1f));
             Assert.IsTrue(result.WasBlocked);
             Assert.That(result.WorldPosition.x, Is.LessThanOrEqualTo(
                 2.001f + PlainBlockMovement.DefaultDragClearanceInsetCells));
@@ -189,13 +190,13 @@ namespace ColorBlockEscape.Tests
             }, core);
             PlainBlockMovement movement = new(level, Layout);
             Assert.IsTrue(movement.TryBegin("l", out _));
-            PlainBlockMoveResult left = movement.Move(new Vector3(0.7f, 1f));
+            PlainBlockMoveResult left = movement.Move(World(0.7f, 1f));
             Assert.IsFalse(left.WasBlocked, left.FailureReason);
-            PlainBlockMoveResult right = movement.Move(new Vector3(1.6f, 1f));
+            PlainBlockMoveResult right = movement.Move(World(1.6f, 1f));
             Assert.IsTrue(right.WasBlocked);
             Assert.That(right.WorldPosition.x, Is.LessThanOrEqualTo(
                 1.001f + PlainBlockMovement.DefaultDragClearanceInsetCells));
-            Assert.AreEqual(new Vector3(1f, 1f), movement.End().WorldPosition);
+            Assert.AreEqual(World(1f, 1f), movement.End().WorldPosition);
         }
 
         [Test]
@@ -211,18 +212,19 @@ namespace ColorBlockEscape.Tests
                 camera.orthographic = true;
                 camera.orthographicSize = 4f;
                 camera.pixelRect = new Rect(0f, 0f, 800f, 600f);
-                cameraObject.transform.position = new Vector3(3f, 3f, -10f);
-                viewObject.transform.position = new Vector3(1f, 1f, -0.2f);
+                cameraObject.transform.position = new Vector3(3f, 10f, 3f);
+                cameraObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                viewObject.transform.position = World(1f, 1f) + Vector3.up * 0.2f;
                 PlainBlockDragAdapter adapter = adapterObject.AddComponent<PlainBlockDragAdapter>();
                 adapter.Initialize(level, Layout, camera,
                     new Dictionary<string, Transform> { ["moving"] = viewObject.transform });
 
-                Vector2 grab = camera.WorldToScreenPoint(new Vector3(1.4f, 1.5f));
+                Vector2 grab = camera.WorldToScreenPoint(World(1.4f, 1.5f));
                 adapter.ProcessPointerSample(0, grab, true, true, false);
-                Vector2 moved = camera.WorldToScreenPoint(new Vector3(1.75f, 1.5f));
+                Vector2 moved = camera.WorldToScreenPoint(World(1.75f, 1.5f));
                 adapter.ProcessPointerSample(0, moved, false, true, false);
                 Assert.That(viewObject.transform.position.x, Is.EqualTo(1.35f).Within(0.001f));
-                Vector2 released = camera.WorldToScreenPoint(new Vector3(2.2f, 1.5f));
+                Vector2 released = camera.WorldToScreenPoint(World(2.2f, 1.5f));
                 adapter.ProcessPointerSample(0, released, false, false, true);
                 Assert.That(viewObject.transform.position.x, Is.EqualTo(2f).Within(0.001f));
                 Assert.AreEqual(new GridCoordinate(2, 1), level.Blocks[0].CommittedOrigin);
@@ -274,5 +276,10 @@ namespace ColorBlockEscape.Tests
         }
 
         private static CellCoordinateData Cell(int x, int y) => new() { X = x, Y = y };
+
+        private static Vector3 World(float x, float y) =>
+            Layout.BoardLocalToWorld(new Vector2(x, y));
+
+        private static Vector2 Local(Vector3 world) => Layout.WorldToBoardLocal(world);
     }
 }

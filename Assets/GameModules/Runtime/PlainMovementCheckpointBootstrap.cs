@@ -46,7 +46,7 @@ namespace ColorBlockEscape.Runtime
                 return;
             }
 
-            GridWorldLayout layout = new(Vector3.zero, Vector2.one);
+            GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
             BuildBoard(authoring.CreateBoardSnapshot(), layout);
             Dictionary<string, Transform> views = BuildBlocks(level, layout);
             Camera sceneCamera = Camera.main;
@@ -55,12 +55,24 @@ namespace ColorBlockEscape.Runtime
                 Debug.LogError("Movement checkpoint scene needs a Main Camera.", this);
                 return;
             }
+            if (!ColorBlockEscapeBoardCamera.TryFrame(sceneCamera, layout, 7, 6,
+                    ColorBlockEscapeBoardCamera.DefaultPitchDegrees,
+                    ColorBlockEscapeBoardCamera.DefaultFieldOfView,
+                    ColorBlockEscapeBoardCamera.DefaultFramingPadding,
+                    ColorBlockEscapeBoardCamera.DefaultMinimumDistance,
+                    out string cameraFailure))
+            {
+                Debug.LogError($"Movement checkpoint camera framing failed: {cameraFailure}", this);
+                return;
+            }
             gameObject.AddComponent<PlainBlockDragAdapter>()
                 .Initialize(level, layout, sceneCamera, views);
         }
 
         private void BuildBoard(BoardDefinitionData board, GridWorldLayout layout)
         {
+            Vector3 boardUp = ColorBlockEscapeBoardSpace.Up(layout);
+            Quaternion boardRotation = ColorBlockEscapeBoardSpace.BoardRotation(layout);
             foreach (CellDefinitionData cell in board.Cells)
             {
                 if (cell.CellState == AuthoredCellState.Inactive) continue;
@@ -70,8 +82,9 @@ namespace ColorBlockEscape.Runtime
                     ? new Color(0.2f, 0.22f, 0.28f)
                     : new Color(0.73f, 0.76f, 0.82f);
                 CreateCube($"Cell {cell.Coordinate.X},{cell.Coordinate.Y}",
-                    center + Vector3.forward * 0.15f,
-                    new Vector3(0.96f, 0.96f, 0.12f), color, transform);
+                    center + boardUp * 0.06f,
+                    new Vector3(0.96f, 0.12f, 0.96f), color, transform,
+                    rotation: boardRotation);
             }
         }
 
@@ -84,7 +97,8 @@ namespace ColorBlockEscape.Runtime
                 GameObject root = new(block.Id);
                 root.transform.SetParent(transform, false);
                 root.transform.position = layout.GridToWorldPosition(block.CommittedOrigin) +
-                                          Vector3.back * 0.2f;
+                                          ColorBlockEscapeBoardSpace.Up(layout) * 0.115f;
+                root.transform.rotation = ColorBlockEscapeBoardSpace.FootprintRotation(layout);
                 Color color = block.Color == ColorIdentity.Slot0
                     ? new Color(0.22f, 0.5f, 0.95f)
                     : new Color(0.94f, 0.38f, 0.28f);
@@ -97,13 +111,22 @@ namespace ColorBlockEscape.Runtime
         }
 
         private static GameObject CreateCube(string name, Vector3 position, Vector3 scale,
-            Color color, Transform parent, bool localPosition = false)
+            Color color, Transform parent, bool localPosition = false,
+            Quaternion? rotation = null)
         {
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.name = name;
             cube.transform.SetParent(parent, false);
-            if (localPosition) cube.transform.localPosition = position;
-            else cube.transform.position = position;
+            if (localPosition)
+            {
+                cube.transform.localPosition = position;
+                cube.transform.localRotation = rotation ?? Quaternion.identity;
+            }
+            else
+            {
+                cube.transform.position = position;
+                cube.transform.rotation = rotation ?? Quaternion.identity;
+            }
             cube.transform.localScale = scale;
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
             Material material = new(shader);

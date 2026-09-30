@@ -25,9 +25,18 @@ namespace ColorBlockEscape.Runtime
         [SerializeField, Min(0f)] private float _captureDistanceCells = 0.35f;
         [SerializeField, Min(0.01f)] private float _exitSpeedCellsPerSecond = 3f;
         [SerializeField] private bool _showHud = true;
+        [Header("Camera")]
+        [SerializeField, Range(1f, 89f)] private float _cameraPitchDegrees =
+            ColorBlockEscapeBoardCamera.DefaultPitchDegrees;
+        [SerializeField, Range(1f, 179f)] private float _cameraFieldOfView =
+            ColorBlockEscapeBoardCamera.DefaultFieldOfView;
+        [SerializeField, Min(1f)] private float _cameraFramingPadding =
+            ColorBlockEscapeBoardCamera.DefaultFramingPadding;
+        [SerializeField, Min(0f)] private float _cameraMinimumDistance =
+            ColorBlockEscapeBoardCamera.DefaultMinimumDistance;
 
-        private readonly GridWorldLayout _layout = new(Vector3.zero, Vector2.one,
-            Vector3.right, Vector3.up, GridCellAnchor.Corner);
+        private readonly GridWorldLayout _layout =
+            ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
         private Camera _camera;
         private LevelDefinition _sourceDefinition;
         private ColorBlockEscapeRuntimeSession _session;
@@ -182,12 +191,18 @@ namespace ColorBlockEscape.Runtime
 
         private void FrameCamera(BoardDefinitionData board)
         {
-            _camera.orthographic = true;
-            float aspect = Mathf.Max(0.1f, _camera.aspect);
-            _camera.orthographicSize = Mathf.Max(4f, board.Height * 0.62f,
-                board.Width / aspect * 0.62f);
-            _camera.transform.position = new Vector3(
-                board.Width * 0.5f, board.Height * 0.5f, -10f);
+            _camera.rect = new Rect(0f, 0f, 1f, 1f);
+            if (!ColorBlockEscapeBoardCamera.TryFrame(
+                    _camera,
+                    _layout,
+                    board.Width,
+                    board.Height,
+                    _cameraPitchDegrees,
+                    _cameraFieldOfView,
+                    _cameraFramingPadding,
+                    _cameraMinimumDistance,
+                    out string failure))
+                Debug.LogError($"CBE camera framing failed: {failure}", this);
         }
 
         private void EnsureOwnedMeshPresentation()

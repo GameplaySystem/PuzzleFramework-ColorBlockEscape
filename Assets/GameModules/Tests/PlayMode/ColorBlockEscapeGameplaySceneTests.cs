@@ -39,11 +39,16 @@ namespace ColorBlockEscape.Tests
 
             Camera camera = Camera.main;
             Assert.IsNotNull(camera);
+            Assert.IsFalse(camera.orthographic);
+            Assert.That(camera.transform.eulerAngles.x,
+                Is.EqualTo(ColorBlockEscapeBoardCamera.DefaultPitchDegrees).Within(0.01f));
             Assert.IsTrue(controller.Level.TryGetBlock("red-bar", out BlockRuntimeState block));
-            Vector2 grab = camera.WorldToScreenPoint(new Vector3(2.5f, 4.5f));
+            Assert.That(controller.BlockViews["red-bar"].position.y, Is.GreaterThan(0f));
+            Assert.That(controller.BlockViews["red-bar"].position.z, Is.EqualTo(4f).Within(0.001f));
+            Vector2 grab = camera.WorldToScreenPoint(World(2.5f, 4.5f));
             controller.DragAdapter.ProcessPointerSample(0, grab, true, true, false);
             Assert.AreEqual("red-bar", controller.DragAdapter.ActiveBlockId);
-            Vector2 moved = camera.WorldToScreenPoint(new Vector3(2.5f, 3.8f));
+            Vector2 moved = camera.WorldToScreenPoint(World(2.5f, 3.8f));
             controller.DragAdapter.ProcessPointerSample(0, moved, false, true, false);
             Assert.That(block.ContinuousOrigin.y, Is.LessThan(4f));
             controller.DragAdapter.ProcessPointerSample(0, moved, false, false, true);
@@ -77,9 +82,9 @@ namespace ColorBlockEscape.Tests
             Assert.That(first.Outcome.RemainingSeconds, Is.LessThan(5f));
             Assert.AreEqual(GameState.Playing, first.Outcome.State);
 
-            Vector2 grab = camera.WorldToScreenPoint(new Vector3(2.5f, 5.5f));
+            Vector2 grab = camera.WorldToScreenPoint(World(2.5f, 5.5f));
             controller.DragAdapter.ProcessPointerSample(0, grab, true, true, false);
-            Vector2 outward = camera.WorldToScreenPoint(new Vector3(2.5f, 6.6f));
+            Vector2 outward = camera.WorldToScreenPoint(World(2.5f, 6.6f));
             controller.DragAdapter.ProcessPointerSample(0, outward, false, true, false);
             Assert.AreEqual(BlockLifecycle.Exiting, first.Level.Blocks[0].Lifecycle);
             Assert.IsTrue(first.Level.Exits[0].IsBusy);
@@ -96,5 +101,9 @@ namespace ColorBlockEscape.Tests
                 new GridCoordinate(2, 5)));
             Assert.IsNotNull(controller.DragAdapter);
         }
+
+        private static Vector3 World(float x, float y) =>
+            ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero)
+                .BoardLocalToWorld(new Vector2(x, y));
     }
 }

@@ -14,7 +14,6 @@ namespace ColorBlockEscape.Runtime
     /// </summary>
     public sealed class PlainBlockDragAdapter : MonoBehaviour
     {
-        private const float BlockViewDepth = -0.2f;
         [SerializeField, Range(0f, 0.45f)]
         private float dragClearanceInsetCells = PlainBlockMovement.DefaultDragClearanceInsetCells;
         private ColorBlockEscapeRuntimeLevel _level;
@@ -24,6 +23,7 @@ namespace ColorBlockEscape.Runtime
         private ColorBlockEscapeExitCapture _exitCapture;
         private ColorBlockEscapeOutcomeSession _outcome;
         private Dictionary<string, Transform> _views;
+        private Dictionary<string, Vector3> _viewOffsets;
         private PuzzleFramework.Interaction.InputSystem _input;
         private int _activePointerId = -1;
 
@@ -43,6 +43,13 @@ namespace ColorBlockEscape.Runtime
             _movement = new PlainBlockMovement(level, layout, _exitCapture,
                 dragClearanceInsetCells);
             _views = new Dictionary<string, Transform>(blockViews);
+            _viewOffsets = new Dictionary<string, Vector3>(_views.Count);
+            foreach (KeyValuePair<string, Transform> pair in _views)
+            {
+                if (!_level.TryGetBlock(pair.Key, out BlockRuntimeState block)) continue;
+                _viewOffsets[pair.Key] = pair.Value.position -
+                    _layout.BoardLocalToWorld(block.ContinuousOrigin);
+            }
             _input = new PuzzleFramework.Interaction.InputSystem();
         }
 
@@ -131,7 +138,10 @@ namespace ColorBlockEscape.Runtime
 
         private void PositionView(string id, Vector3 logicalWorldPosition)
         {
-            _views[id].position = logicalWorldPosition + Vector3.forward * BlockViewDepth;
+            _views[id].position = logicalWorldPosition +
+                                  (_viewOffsets.TryGetValue(id, out Vector3 offset)
+                                      ? offset
+                                      : Vector3.zero);
         }
 
         private static bool TryReadPointer(out int id, out Vector2 screen,

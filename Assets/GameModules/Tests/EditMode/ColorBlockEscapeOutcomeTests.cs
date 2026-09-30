@@ -10,8 +10,8 @@ namespace ColorBlockEscape.Tests
 {
     public sealed class ColorBlockEscapeOutcomeTests
     {
-        private static readonly GridWorldLayout Layout = new(Vector3.zero, Vector2.one,
-            Vector3.right, Vector3.up, GridCellAnchor.Corner);
+        private static readonly GridWorldLayout Layout =
+            ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
 
         [Test]
         public void CountdownStartsFromAuthoredDurationAndAdvancesNormally()

@@ -11,8 +11,8 @@ namespace ColorBlockEscape.Tests
 {
     public sealed class ExitCaptureTests
     {
-        private static readonly GridWorldLayout Layout = new(Vector3.zero, Vector2.one,
-            Vector3.right, Vector3.up, GridCellAnchor.Corner);
+        private static readonly GridWorldLayout Layout =
+            ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
 
         [Test]
         public void MatchingTwoByThreeBlockFitsTwoWideTopExitOnlyAfterOutwardDrag()
@@ -30,7 +30,7 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(movement.TryBegin("block", out _));
             Assert.AreEqual(BlockLifecycle.OnBoard, level.Blocks[0].Lifecycle,
                 "Starting against an exit must not auto-capture.");
-            PlainBlockMoveResult result = movement.Move(new Vector3(2f, 4f));
+            PlainBlockMoveResult result = movement.Move(World(2f, 4f));
             Assert.IsTrue(result.WasCaptured);
             Assert.AreEqual(BlockLifecycle.Exiting, level.Blocks[0].Lifecycle);
             Assert.IsTrue(level.Exits[0].IsBusy);
@@ -50,7 +50,7 @@ namespace ColorBlockEscape.Tests
             PlainBlockMovement movement = new(level, Layout,
                 new ColorBlockEscapeExitCapture(level, Layout));
             Assert.IsTrue(movement.TryBegin("block", out _));
-            Assert.IsFalse(movement.Move(new Vector3(5f, 1f)).WasCaptured);
+            Assert.IsFalse(movement.Move(World(5f, 1f)).WasCaptured);
             Assert.AreEqual(BlockLifecycle.OnBoard, level.Blocks[0].Lifecycle);
             Assert.IsFalse(level.Exits[0].IsBusy);
         }
@@ -69,7 +69,7 @@ namespace ColorBlockEscape.Tests
                 new Vector2(2f, 5f)).Captured);
             PlainBlockMovement movement = new(level, Layout, capture);
             Assert.IsTrue(movement.TryBegin("block", out _));
-            Assert.IsFalse(movement.Move(new Vector3(2f, 6f)).WasCaptured);
+            Assert.IsFalse(movement.Move(World(2f, 6f)).WasCaptured);
             Assert.AreEqual(BlockLifecycle.OnBoard, level.Blocks[0].Lifecycle);
             Assert.IsFalse(level.Exits[0].IsBusy);
         }
@@ -86,15 +86,15 @@ namespace ColorBlockEscape.Tests
             PlainBlockMovement movement = new(level, Layout,
                 new ColorBlockEscapeExitCapture(level, Layout, new ExitCaptureSettings(0.70f)));
             Assert.IsTrue(movement.TryBegin("block", out _));
-            Assert.IsFalse(movement.Move(new Vector3(2.2f, 6f)).WasCaptured);
-            Assert.IsTrue(movement.Move(new Vector3(2.5f, 6f)).WasCaptured);
+            Assert.IsFalse(movement.Move(World(2.2f, 6f)).WasCaptured);
+            Assert.IsTrue(movement.Move(World(2.5f, 6f)).WasCaptured);
             Assert.AreEqual(new GridCoordinate(3, 5), level.Blocks[0].CommittedOrigin);
 
             ColorBlockEscapeRuntimeLevel strictLevel = Build(authored);
             PlainBlockMovement strict = new(strictLevel, Layout,
                 new ColorBlockEscapeExitCapture(strictLevel, Layout, new ExitCaptureSettings(0.80f)));
             Assert.IsTrue(strict.TryBegin("block", out _));
-            Assert.IsFalse(strict.Move(new Vector3(2.5f, 6f)).WasCaptured);
+            Assert.IsFalse(strict.Move(World(2.5f, 6f)).WasCaptured);
         }
 
         [Test]
@@ -111,7 +111,7 @@ namespace ColorBlockEscape.Tests
                 new ColorBlockEscapeExitCapture(level, Layout,
                     new ExitCaptureSettings(captureDistanceCells: 2.1f)));
             Assert.IsTrue(movement.TryBegin("block", out _));
-            Assert.IsFalse(movement.Move(new Vector3(2f, 7f)).WasCaptured);
+            Assert.IsFalse(movement.Move(World(2f, 7f)).WasCaptured);
             Assert.AreEqual(BlockLifecycle.OnBoard, level.Blocks[0].Lifecycle);
             Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(2, 3)));
             Assert.IsFalse(level.Exits[0].IsBusy);
@@ -133,16 +133,16 @@ namespace ColorBlockEscape.Tests
                     outwardSpeedCellsPerSecond: 1f));
             PlainBlockMovement movement = new(level, Layout, capture);
             Assert.IsTrue(movement.TryBegin("first", out _));
-            Assert.IsTrue(movement.Move(new Vector3(2f, 6f)).WasCaptured);
+            Assert.IsTrue(movement.Move(World(2f, 6f)).WasCaptured);
             Assert.IsTrue(movement.TryBegin("second", out _));
-            Assert.IsFalse(movement.Move(new Vector3(2f, 7f)).WasCaptured);
+            Assert.IsFalse(movement.Move(World(2f, 7f)).WasCaptured);
             Assert.IsTrue(level.Exits[0].IsBusy);
             capture.Advance(0.5f);
             Assert.IsTrue(level.Exits[0].IsBusy);
             capture.Advance(0.5f);
             Assert.AreEqual(BlockLifecycle.Removed, level.Blocks[0].Lifecycle);
             Assert.IsFalse(level.Exits[0].IsBusy);
-            Assert.IsTrue(movement.Move(new Vector3(2f, 7f)).WasCaptured);
+            Assert.IsTrue(movement.Move(World(2f, 7f)).WasCaptured);
         }
 
         [Test]
@@ -161,7 +161,7 @@ namespace ColorBlockEscape.Tests
                 new ExitCaptureSettings(outwardSpeedCellsPerSecond: 1f));
             PlainBlockMovement movement = new(level, Layout, capture);
             Assert.IsTrue(movement.TryBegin("leaving", out _));
-            Assert.IsTrue(movement.Move(new Vector3(2f, 5f)).WasCaptured);
+            Assert.IsTrue(movement.Move(World(2f, 5f)).WasCaptured);
             Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(3, 5)),
                 "The irregular trailing arm's future cell must be reserved at acceptance.");
             HashSet<GridCoordinate> atAcceptance = new(
@@ -179,8 +179,8 @@ namespace ColorBlockEscape.Tests
                 .OccupiedCoordinates).IsSubsetOf(atAcceptance));
             Assert.IsTrue(level.Exits[0].IsBusy);
             Assert.IsTrue(movement.TryBegin("waiting", out _));
-            Assert.IsFalse(movement.Move(new Vector3(2f, 4f)).WasCaptured);
-            Assert.AreEqual(new Vector3(2f, 4f), movement.End().WorldPosition);
+            Assert.IsFalse(movement.Move(World(2f, 4f)).WasCaptured);
+            Assert.AreEqual(World(2f, 4f), movement.End().WorldPosition);
             Assert.IsTrue(level.FrameworkContext.CellOccupancySystem.IsOccupied(new GridCoordinate(2, 4)));
             capture.Advance(1f);
             Assert.AreEqual(BlockLifecycle.Removed, level.Blocks[0].Lifecycle);
@@ -203,7 +203,7 @@ namespace ColorBlockEscape.Tests
             PlainBlockMovement movement = new(level, Layout,
                 new ColorBlockEscapeExitCapture(level, Layout));
             Assert.IsTrue(movement.TryBegin("leaving", out _));
-            Assert.IsFalse(movement.Move(new Vector3(2f, 5f)).WasCaptured);
+            Assert.IsFalse(movement.Move(World(2f, 5f)).WasCaptured);
             Assert.AreEqual(BlockLifecycle.OnBoard, level.Blocks[0].Lifecycle);
             Assert.IsFalse(level.Exits[0].IsBusy);
         }
@@ -214,5 +214,8 @@ namespace ColorBlockEscape.Tests
                 out string failure), failure);
             return level;
         }
+
+        private static Vector3 World(float x, float y) =>
+            Layout.BoardLocalToWorld(new Vector2(x, y));
     }
 }

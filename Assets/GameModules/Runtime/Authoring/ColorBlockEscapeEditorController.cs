@@ -12,6 +12,7 @@ namespace ColorBlockEscape.Runtime.Authoring
     /// <summary>Dedicated CBE Play-mode scene adapter; framework session and tools own the edits.</summary>
     public sealed class ColorBlockEscapeEditorController : MonoBehaviour
     {
+        private const float InspectorPanelWidth = 330f;
         [SerializeField, Range(0.01f, 1f)] private float _captureOverlapFraction = 0.70f;
         [SerializeField, Min(0f)] private float _captureDistanceCells = 0.35f;
         [SerializeField, Min(0.01f)] private float _exitSpeedCellsPerSecond = 3f;
@@ -55,8 +56,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         {
             _model = new ColorBlockEscapeAuthoringSession();
             _tools = new ColorBlockEscapeAuthoringTools(_model);
-            _layout = new GridWorldLayout(Vector3.zero, Vector2.one,
-                Vector3.right, Vector3.up, GridCellAnchor.Corner);
+            _layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
             _blockMeshPresentation = new ColorBlockEscapeBlockMeshPresentation(_blockVisualProfile);
             _camera = Camera.main;
             if (_camera == null) { Debug.LogError("CBE editor needs a Main Camera.", this); return; }
@@ -74,7 +74,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         {
             if (_camera == null || IsPlayTesting || Mouse.current == null) return;
             Vector2 screen = Mouse.current.position.ReadValue();
-            bool pointerOverBoard = screen.x >= 330f;
+            bool pointerOverBoard = screen.x >= InspectorPanelWidth;
             if (GUIUtility.keyboardControl == 0)
                 ProcessKeyboardShortcuts();
             if (pointerOverBoard) ProcessShapeScroll(Mouse.current.scroll.ReadValue().y);
@@ -327,6 +327,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             _playRoot = null;
             _playTestController = null;
             _authoringRoot.SetActive(true);
+            FrameEditorCamera();
             _message = "Returned to the unchanged authoring session.";
         }
 
@@ -364,17 +365,26 @@ namespace ColorBlockEscape.Runtime.Authoring
             _authoringRoot.transform.SetParent(transform, false);
             ColorBlockEscapeAuthoringView.Build(_model, null, _layout, _authoringRoot.transform,
                 _blockMeshPresentation, _boardCellPrefab);
-            if (_camera != null)
-            {
-                _camera.orthographic = true;
-                _camera.orthographicSize = Mathf.Max(4f, _model.Core.Height * 0.6f,
-                    _model.Core.Width * Screen.height / Mathf.Max(1f, Screen.width - 330f) * 0.6f);
-                float panelWorldOffset = 165f * 2f * _camera.orthographicSize /
-                                         Mathf.Max(1f, Screen.height);
-                _camera.transform.position = new Vector3(
-                    _model.Core.Width * 0.5f - panelWorldOffset,
-                    _model.Core.Height * 0.5f, -10f);
-            }
+            FrameEditorCamera();
+        }
+
+        private void FrameEditorCamera()
+        {
+            if (_camera == null) return;
+            float panelFraction = Mathf.Clamp01(
+                InspectorPanelWidth / Mathf.Max(1f, Screen.width));
+            _camera.rect = new Rect(panelFraction, 0f, Mathf.Max(0.01f, 1f - panelFraction), 1f);
+            if (!ColorBlockEscapeBoardCamera.TryFrame(
+                    _camera,
+                    _layout,
+                    _model.Core.Width,
+                    _model.Core.Height,
+                    ColorBlockEscapeBoardCamera.DefaultPitchDegrees,
+                    ColorBlockEscapeBoardCamera.DefaultFieldOfView,
+                    ColorBlockEscapeBoardCamera.DefaultFramingPadding,
+                    ColorBlockEscapeBoardCamera.DefaultMinimumDistance,
+                    out string failure))
+                Debug.LogError($"CBE editor camera framing failed: {failure}", this);
         }
 
         private void SyncExitFields()
@@ -534,7 +544,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (!TryParsePositive(_exitWidth, out _))
             { ClearPreview(); _message = "Exit width must be a positive integer."; return; }
             Vector2 screen = Mouse.current.position.ReadValue();
-            if (screen.x < 330f) { ClearPreview(); return; }
+            if (screen.x < InspectorPanelWidth) { ClearPreview(); return; }
             WallGenerationResult boundary = _model.Core.CreateBoundary(
                 state => state == AuthoredCellState.Active);
             if (!BoardAuthoringPicker.TryPickBoundaryEdge(_camera.ScreenPointToRay(screen),

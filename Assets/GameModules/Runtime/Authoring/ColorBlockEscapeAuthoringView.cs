@@ -79,6 +79,8 @@ namespace ColorBlockEscape.Runtime.Authoring
             IReadOnlyList<ExitViewData> exits, GridWorldLayout layout, Transform root,
             ModularBoardCellView boardCellPrefab)
         {
+            Vector3 boardUp = ColorBlockEscapeBoardSpace.Up(layout);
+            Quaternion boardRotation = ColorBlockEscapeBoardSpace.BoardRotation(layout);
             WallGenerationResult boundary = CreateActiveBoundary(board);
             bool modularBoardBuilt = TryBuildModularBoard(
                 boundary, exits, layout, root, boardCellPrefab);
@@ -90,7 +92,8 @@ namespace ColorBlockEscape.Runtime.Authoring
                 Color color = cell.CellState == AuthoredCellState.Blocked
                     ? new Color(0.20f, 0.23f, 0.29f) : new Color(0.74f, 0.77f, 0.82f);
                 Cube($"Cell {coordinate}", layout.CellCenterToWorld(coordinate) +
-                    Vector3.forward * 0.16f, new Vector3(0.96f, 0.96f, 0.12f), color, root);
+                    boardUp * 0.06f, new Vector3(0.96f, 0.12f, 0.96f), color, root,
+                    rotation: boardRotation);
             }
 
             if (!modularBoardBuilt)
@@ -101,11 +104,15 @@ namespace ColorBlockEscape.Runtime.Authoring
                     bool horizontal = edge.Direction == BoardEdgeDirection.North ||
                                       edge.Direction == BoardEdgeDirection.South;
                     Vector3 position = center + (horizontal
-                        ? Vector3.up * (edge.Direction == BoardEdgeDirection.North ? 0.5f : -0.5f)
-                        : Vector3.right * (edge.Direction == BoardEdgeDirection.East ? 0.5f : -0.5f));
-                    Cube("Boundary", position + Vector3.back * 0.03f,
-                        horizontal ? new Vector3(1f, 0.09f, 0.2f) : new Vector3(0.09f, 1f, 0.2f),
-                        new Color(0.37f, 0.43f, 0.53f), root);
+                        ? layout.BoardYAxis *
+                          (edge.Direction == BoardEdgeDirection.North ? 0.5f : -0.5f)
+                        : layout.BoardXAxis *
+                          (edge.Direction == BoardEdgeDirection.East ? 0.5f : -0.5f));
+                    Cube("Boundary", position + boardUp * 0.10f,
+                        horizontal ? new Vector3(1f, 0.2f, 0.09f) :
+                            new Vector3(0.09f, 0.2f, 1f),
+                        new Color(0.37f, 0.43f, 0.53f), root,
+                        rotation: boardRotation);
                 }
 
             foreach (ExitViewData exit in exits)
@@ -115,11 +122,12 @@ namespace ColorBlockEscape.Runtime.Authoring
                     Vector3 center = layout.CellCenterToWorld(cell);
                     bool horizontal = exit.Side == ExitSide.Top || exit.Side == ExitSide.Bottom;
                     center += horizontal
-                        ? Vector3.up * (exit.Side == ExitSide.Top ? 0.57f : -0.57f)
-                        : Vector3.right * (exit.Side == ExitSide.Right ? 0.57f : -0.57f);
-                    Cube($"Exit {exit.Id}", center + Vector3.back * 0.10f,
-                        horizontal ? new Vector3(0.92f, 0.18f, 0.22f) :
-                            new Vector3(0.18f, 0.92f, 0.22f), Tint(exit.Color), root);
+                        ? layout.BoardYAxis * (exit.Side == ExitSide.Top ? 0.57f : -0.57f)
+                        : layout.BoardXAxis * (exit.Side == ExitSide.Right ? 0.57f : -0.57f);
+                    Cube($"Exit {exit.Id}", center + boardUp * 0.11f,
+                        horizontal ? new Vector3(0.92f, 0.22f, 0.18f) :
+                            new Vector3(0.18f, 0.22f, 0.92f), Tint(exit.Color), root,
+                        rotation: boardRotation);
                 }
         }
 
@@ -178,6 +186,8 @@ namespace ColorBlockEscape.Runtime.Authoring
             ColorIdentity color, bool valid, GridWorldLayout layout, Transform root)
         {
             Color tint = valid ? Tint(color) : new Color(0.96f, 0.18f, 0.17f);
+            Vector3 boardUp = ColorBlockEscapeBoardSpace.Up(layout);
+            Quaternion boardRotation = ColorBlockEscapeBoardSpace.BoardRotation(layout);
             for (int index = 0; index < width; index++)
             {
                 GridCoordinate cell = side == ExitSide.Top || side == ExitSide.Bottom
@@ -185,11 +195,12 @@ namespace ColorBlockEscape.Runtime.Authoring
                 Vector3 center = layout.CellCenterToWorld(cell);
                 bool horizontal = side == ExitSide.Top || side == ExitSide.Bottom;
                 center += horizontal
-                    ? Vector3.up * (side == ExitSide.Top ? 0.5f : -0.5f)
-                    : Vector3.right * (side == ExitSide.Right ? 0.5f : -0.5f);
-                Cube("Exit candidate", center + Vector3.back * 0.35f,
-                    horizontal ? new Vector3(0.94f, 0.13f, 0.12f) : new Vector3(0.13f, 0.94f, 0.12f),
-                    tint, root);
+                    ? layout.BoardYAxis * (side == ExitSide.Top ? 0.5f : -0.5f)
+                    : layout.BoardXAxis * (side == ExitSide.Right ? 0.5f : -0.5f);
+                Cube("Exit candidate", center + boardUp * 0.18f,
+                    horizontal ? new Vector3(0.94f, 0.12f, 0.13f) :
+                        new Vector3(0.13f, 0.12f, 0.94f),
+                    tint, root, rotation: boardRotation);
             }
         }
 
@@ -200,7 +211,10 @@ namespace ColorBlockEscape.Runtime.Authoring
         {
             GameObject block = new(id);
             block.transform.SetParent(parent, false);
-            block.transform.position = layout.GridToWorldPosition(origin) + Vector3.back * 0.2f;
+            block.transform.position = layout.GridToWorldPosition(origin) +
+                                       ColorBlockEscapeBoardSpace.Up(layout) *
+                                       (blockMeshPresentation.Depth * 0.5f);
+            block.transform.rotation = ColorBlockEscapeBoardSpace.FootprintRotation(layout);
             FootprintMeshGenerationResult generated =
                 blockMeshPresentation.GetOrCreate(offsets, layout);
             if (!generated.Success)
@@ -253,7 +267,7 @@ namespace ColorBlockEscape.Runtime.Authoring
                 : exit.StartCell.Offset(0, index);
 
         private static void Cube(string name, Vector3 position, Vector3 scale,
-            Color color, Transform parent, bool local = false)
+            Color color, Transform parent, bool local = false, Quaternion? rotation = null)
         {
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.name = name;
@@ -261,8 +275,16 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (Application.isPlaying) Object.Destroy(collider);
             else Object.DestroyImmediate(collider);
             cube.transform.SetParent(parent, false);
-            if (local) cube.transform.localPosition = position;
-            else cube.transform.position = position;
+            if (local)
+            {
+                cube.transform.localPosition = position;
+                cube.transform.localRotation = rotation ?? Quaternion.identity;
+            }
+            else
+            {
+                cube.transform.position = position;
+                cube.transform.rotation = rotation ?? Quaternion.identity;
+            }
             cube.transform.localScale = scale;
             cube.GetComponent<Renderer>().sharedMaterial = MaterialFor(color);
         }

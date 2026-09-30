@@ -45,8 +45,7 @@ namespace ColorBlockEscape.Tests
             ColorBlockEscapeAuthoringSession model = new(3, 3);
             Assert.IsTrue(model.PutExit("exit", ExitSide.Top, new GridCoordinate(1, 2),
                 1, ColorIdentity.Slot0).Success);
-            GridWorldLayout layout = new(Vector3.zero, Vector2.one,
-                Vector3.right, Vector3.up, GridCellAnchor.Corner);
+            GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
             GameObject root = new("CBE board asset test");
             using ColorBlockEscapeBlockMeshPresentation meshes = new();
             try
@@ -73,8 +72,7 @@ namespace ColorBlockEscape.Tests
             ColorBlockEscapeAuthoringSession model = ReadyModel();
             Assert.IsTrue(model.TryBeginPlayTest(out ColorBlockEscapeRuntimeLevel runtime,
                 out string failure), failure);
-            GridWorldLayout layout = new(Vector3.zero, Vector2.one,
-                Vector3.right, Vector3.up, GridCellAnchor.Corner);
+            GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
             GameObject editorRoot = new("CBE generated editor block test");
             GameObject runtimeRoot = new("CBE generated runtime block test");
             using ColorBlockEscapeBlockMeshPresentation meshes =
@@ -251,10 +249,9 @@ namespace ColorBlockEscape.Tests
         [Test]
         public void CornerAnchoredPickingMatchesMovementFootprintSquares()
         {
-            GridWorldLayout layout = new(Vector3.zero, Vector2.one,
-                Vector3.right, Vector3.up, GridCellAnchor.Corner);
-            Ray first = new(new Vector3(1.99f, 1.5f, -5f), Vector3.forward);
-            Ray second = new(new Vector3(2.01f, 1.5f, -5f), Vector3.forward);
+            GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
+            Ray first = new(new Vector3(1.99f, 5f, 1.5f), Vector3.down);
+            Ray second = new(new Vector3(2.01f, 5f, 1.5f), Vector3.down);
             Assert.IsTrue(BoardAuthoringPicker.TryPickCell(first, layout, Vector3.zero,
                 out GridCoordinate left));
             Assert.IsTrue(BoardAuthoringPicker.TryPickCell(second, layout, Vector3.zero,
@@ -290,9 +287,8 @@ namespace ColorBlockEscape.Tests
         public void SharedBoundaryPickerFindsExteriorEdgeButCbeChecksItsMeaning()
         {
             ColorBlockEscapeAuthoringSession model = new(4, 4);
-            GridWorldLayout layout = new(Vector3.zero, Vector2.one,
-                Vector3.right, Vector3.up, GridCellAnchor.Corner);
-            Ray ray = new(new Vector3(1.5f, 4.05f, -5f), Vector3.forward);
+            GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
+            Ray ray = new(new Vector3(1.5f, 5f, 4.05f), Vector3.down);
             Assert.IsTrue(BoardAuthoringPicker.TryPickBoundaryEdge(ray, layout, Vector3.zero,
                 model.Core.CreateBoundary(state => state == AuthoredCellState.Active), 0.2f,
                 out BoardBoundaryEdge edge));

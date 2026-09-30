@@ -33,11 +33,12 @@ namespace ColorBlockEscape.Editor
             GameObject cameraObject = new("Main Camera");
             cameraObject.tag = "MainCamera";
             Camera camera = cameraObject.AddComponent<Camera>();
-            camera.orthographic = true;
-            camera.orthographicSize = 4.5f;
+            camera.orthographic = false;
+            camera.fieldOfView = ColorBlockEscapeBoardCamera.DefaultFieldOfView;
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.11f, 0.12f, 0.17f);
-            cameraObject.transform.position = new Vector3(3f, 3f, -10f);
+            cameraObject.transform.rotation = Quaternion.Euler(
+                ColorBlockEscapeBoardCamera.DefaultPitchDegrees, 0f, 0f);
 
             ColorBlockEscapeRuntimeController controller =
                 new GameObject("Color Block Escape Gameplay")
