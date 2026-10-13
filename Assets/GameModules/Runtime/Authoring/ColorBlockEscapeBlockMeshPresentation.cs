@@ -16,8 +16,8 @@ namespace ColorBlockEscape.Runtime.Authoring
         [SerializeField, Min(0.01f)] private float _depth = 0.24f;
         [SerializeField, Min(0f)] private float _bevelWidth = 0.04f;
         [SerializeField, Range(1, 8)] private int _bevelSegments = 2;
-        [SerializeField, Min(0.001f)] private float _outlineWidth = 0.025f;
-        [SerializeField, Min(0f)] private float _outlineSurfaceOffset = 0.002f;
+        [SerializeField, Min(0.001f)] private float _outlineWidth = 0.018f;
+        [SerializeField, Min(0f)] private float _outlineSurfaceOffset = 0.001f;
         [SerializeField] private Color _outlineColor = new(0.035f, 0.045f, 0.065f, 1f);
 
         public ColorBlockEscapeBlockVisualProfile()
@@ -37,9 +37,9 @@ namespace ColorBlockEscape.Runtime.Authoring
         public float Depth => _depth;
         public float BevelWidth => _bevelWidth;
         public int BevelSegments => _bevelSegments;
-        public float OutlineWidth => _outlineWidth > 0f ? _outlineWidth : 0.025f;
+        public float OutlineWidth => _outlineWidth > 0f ? _outlineWidth : 0.018f;
         public float OutlineSurfaceOffset =>
-            _outlineSurfaceOffset > 0f ? _outlineSurfaceOffset : 0.002f;
+            _outlineSurfaceOffset > 0f ? _outlineSurfaceOffset : 0.001f;
         public Color OutlineColor => _outlineColor.a > 0f
             ? _outlineColor : new Color(0.035f, 0.045f, 0.065f, 1f);
 

@@ -41,23 +41,19 @@ namespace ColorBlockEscape.Runtime.Authoring
     }
 
     /// <summary>
-    /// Builds a dark structural cage around a generated CBE block. The framework remains the
+    /// Builds a dark structural surface outline for a generated CBE block. The framework remains the
     /// source of boundary topology; this class only converts those facts into CBE view geometry.
     /// </summary>
     public sealed class ColorBlockEscapeBlockOutlineGenerator
     {
-        private static readonly int[] BoxTriangles =
+        private static readonly int[] DoubleSidedQuadTriangles =
         {
-            0, 2, 1, 0, 3, 2,
-            4, 5, 6, 4, 6, 7,
-            0, 1, 5, 0, 5, 4,
-            3, 7, 6, 3, 6, 2,
-            0, 4, 7, 0, 7, 3,
-            1, 2, 6, 1, 6, 5
+            0, 1, 2, 0, 2, 3,
+            2, 1, 0, 3, 2, 0
         };
 
         /// <summary>
-        /// Generates top and bottom perimeter bars plus vertical bars at every footprint turn.
+        /// Generates flush top/bottom perimeter ribbons and wrapped side ribbons at every turn.
         /// The returned mesh has no collider and must never be used for gameplay queries.
         /// </summary>
         public ColorBlockEscapeBlockOutlineGenerationResult Generate(
@@ -85,6 +81,10 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (bevelWidth * 2f >= Mathf.Min(layout.CellSize.x, layout.CellSize.y))
                 return ColorBlockEscapeBlockOutlineGenerationResult.Failed(
                     "Block outline bevel must stay below half the smallest cell dimension.");
+            if ((bevelWidth + outlineWidth) * 2f >=
+                Mathf.Min(layout.CellSize.x, layout.CellSize.y))
+                return ColorBlockEscapeBlockOutlineGenerationResult.Failed(
+                    "Block outline width collapses the smallest cap corridor.");
             if (!IsFinite(surfaceOffset) || surfaceOffset < 0f)
                 return ColorBlockEscapeBlockOutlineGenerationResult.Failed(
                     "Block outline surface offset must be finite and non-negative.");
@@ -110,42 +110,51 @@ namespace ColorBlockEscape.Runtime.Authoring
                     verticalCount++;
 
             int perimeterCount = boundary.ExposedEdges.Count * 2;
-            int segmentCount = perimeterCount + verticalCount;
-            List<Vector3> vertices = new(segmentCount * 8);
-            List<int> triangles = new(segmentCount * 36);
+            int renderedQuadCount = perimeterCount + verticalCount * 2;
+            List<Vector3> vertices = new(renderedQuadCount * 4);
+            List<int> triangles = new(renderedQuadCount * 12);
             float halfDepth = depth * 0.5f;
             float anchorOffset = layout.CellAnchor == GridCellAnchor.Center ? -0.5f : 0f;
-            float raisedWidth = outlineWidth + surfaceOffset * 2f;
-            Dictionary<GridVertexCoordinate, Vector2> capPoints = new();
+            Dictionary<GridVertexCoordinate, Vector2> outerCapPoints = new();
+            Dictionary<GridVertexCoordinate, Vector2> innerCapPoints = new();
+            HashSet<GridVertexCoordinate> turningVertices = new();
             foreach (BoardBoundaryVertex vertex in boundary.BoundaryVertices)
-                capPoints.Add(vertex.Coordinate,
+            {
+                outerCapPoints.Add(vertex.Coordinate,
                     InsetVertexPosition(vertex, layout, anchorOffset, bevelWidth));
+                innerCapPoints.Add(vertex.Coordinate,
+                    InsetVertexPosition(vertex, layout, anchorOffset,
+                        bevelWidth + outlineWidth));
+                if (vertex.Kind == BoardBoundaryVertexKind.Convex ||
+                    vertex.Kind == BoardBoundaryVertexKind.Concave)
+                    turningVertices.Add(vertex.Coordinate);
+            }
 
             foreach (BoardBoundaryEdge edge in boundary.ExposedEdges)
             {
-                Vector2 start = capPoints[edge.StartVertex];
-                Vector2 end = capPoints[edge.EndVertex];
-                Vector2 center = (start + end) * 0.5f;
-                Vector2 delta = end - start;
-                Vector3 size = Mathf.Abs(delta.x) > Mathf.Abs(delta.y)
-                    ? new Vector3(Mathf.Abs(delta.x) + outlineWidth, raisedWidth, raisedWidth)
-                    : new Vector3(raisedWidth, Mathf.Abs(delta.y) + outlineWidth, raisedWidth);
-                AppendBox(vertices, triangles,
-                    new Vector3(center.x, center.y, -halfDepth - surfaceOffset), size);
-                AppendBox(vertices, triangles,
-                    new Vector3(center.x, center.y, halfDepth + surfaceOffset), size);
-            }
+                Vector2 outerStart = outerCapPoints[edge.StartVertex];
+                Vector2 outerEnd = outerCapPoints[edge.EndVertex];
+                Vector2 innerStart = innerCapPoints[edge.StartVertex];
+                Vector2 innerEnd = innerCapPoints[edge.EndVertex];
+                AppendDoubleSidedQuad(vertices, triangles,
+                    AtDepth(outerStart, -halfDepth - surfaceOffset),
+                    AtDepth(outerEnd, -halfDepth - surfaceOffset),
+                    AtDepth(innerEnd, -halfDepth - surfaceOffset),
+                    AtDepth(innerStart, -halfDepth - surfaceOffset));
+                AppendDoubleSidedQuad(vertices, triangles,
+                    AtDepth(outerStart, halfDepth + surfaceOffset),
+                    AtDepth(innerStart, halfDepth + surfaceOffset),
+                    AtDepth(innerEnd, halfDepth + surfaceOffset),
+                    AtDepth(outerEnd, halfDepth + surfaceOffset));
 
-            float verticalLength = Mathf.Max(outlineWidth,
-                depth - bevelWidth * 2f + outlineWidth + surfaceOffset * 2f);
-            foreach (BoardBoundaryVertex vertex in boundary.BoundaryVertices)
-            {
-                if (vertex.Kind != BoardBoundaryVertexKind.Convex &&
-                    vertex.Kind != BoardBoundaryVertexKind.Concave)
-                    continue;
-                Vector2 point = VertexPosition(vertex.Coordinate, layout, anchorOffset);
-                AppendBox(vertices, triangles, new Vector3(point.x, point.y, 0f),
-                    new Vector3(raisedWidth, raisedWidth, verticalLength));
+                if (turningVertices.Contains(edge.StartVertex))
+                    AppendSideRibbon(vertices, triangles, edge, edge.StartVertex,
+                        edge.EndVertex, layout, anchorOffset, halfDepth, bevelWidth,
+                        outlineWidth, surfaceOffset);
+                if (turningVertices.Contains(edge.EndVertex))
+                    AppendSideRibbon(vertices, triangles, edge, edge.EndVertex,
+                        edge.StartVertex, layout, anchorOffset, halfDepth, bevelWidth,
+                        outlineWidth, surfaceOffset);
             }
 
             Mesh mesh = new() { name = "CBE generated block outline" };
@@ -213,25 +222,56 @@ namespace ColorBlockEscape.Runtime.Authoring
             _ => Vector2.zero
         };
 
-        private static void AppendBox(
+        private static void AppendSideRibbon(
             ICollection<Vector3> vertices,
             ICollection<int> triangles,
-            Vector3 center,
-            Vector3 size)
+            BoardBoundaryEdge edge,
+            GridVertexCoordinate cornerVertex,
+            GridVertexCoordinate interiorVertex,
+            GridWorldLayout layout,
+            float anchorOffset,
+            float halfDepth,
+            float bevelWidth,
+            float outlineWidth,
+            float surfaceOffset)
+        {
+            Vector2 corner = VertexPosition(cornerVertex, layout, anchorOffset);
+            Vector2 towardInterior =
+                (VertexPosition(interiorVertex, layout, anchorOffset) - corner).normalized;
+            Vector2 outward = edge.Direction switch
+            {
+                BoardEdgeDirection.North => Vector2.up,
+                BoardEdgeDirection.East => Vector2.right,
+                BoardEdgeDirection.South => Vector2.down,
+                _ => Vector2.left
+            };
+            corner += outward * surfaceOffset;
+            Vector2 inner = corner + towardInterior * outlineWidth;
+            float top = -halfDepth + bevelWidth;
+            float bottom = halfDepth - bevelWidth;
+            AppendDoubleSidedQuad(vertices, triangles,
+                AtDepth(corner, top), AtDepth(inner, top),
+                AtDepth(inner, bottom), AtDepth(corner, bottom));
+        }
+
+        private static Vector3 AtDepth(Vector2 point, float depth) =>
+            new(point.x, point.y, depth);
+
+        private static void AppendDoubleSidedQuad(
+            ICollection<Vector3> vertices,
+            ICollection<int> triangles,
+            Vector3 first,
+            Vector3 second,
+            Vector3 third,
+            Vector3 fourth)
         {
             int start = vertices.Count;
-            Vector3 half = size * 0.5f;
-            vertices.Add(center + new Vector3(-half.x, -half.y, -half.z));
-            vertices.Add(center + new Vector3(half.x, -half.y, -half.z));
-            vertices.Add(center + new Vector3(half.x, half.y, -half.z));
-            vertices.Add(center + new Vector3(-half.x, half.y, -half.z));
-            vertices.Add(center + new Vector3(-half.x, -half.y, half.z));
-            vertices.Add(center + new Vector3(half.x, -half.y, half.z));
-            vertices.Add(center + new Vector3(half.x, half.y, half.z));
-            vertices.Add(center + new Vector3(-half.x, half.y, half.z));
-
-            for (int i = 0; i < BoxTriangles.Length; i++)
-                triangles.Add(start + BoxTriangles[i]);
+            vertices.Add(first);
+            vertices.Add(second);
+            vertices.Add(third);
+            vertices.Add(fourth);
+            for (int i = 0; i < DoubleSidedQuadTriangles.Length; i++)
+                triangles.Add(start + DoubleSidedQuadTriangles[i]);
         }
 
         private static bool IsFinite(float value) =>

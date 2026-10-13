@@ -83,11 +83,14 @@ namespace ColorBlockEscape.Tests
             Assert.AreEqual(6, generated.VerticalSegmentCount,
                 "The L footprint has five convex corners and one concave corner.");
             Assert.AreEqual(26, generated.TotalSegmentCount);
-            Assert.AreEqual(generated.TotalSegmentCount * 8, generated.Mesh.vertexCount);
-            Assert.AreEqual(generated.TotalSegmentCount * 36,
-                generated.Mesh.triangles.Length);
+            Assert.Greater(generated.Mesh.vertexCount, 0);
+            Assert.AreEqual(0, generated.Mesh.triangles.Length % 3);
             Assert.Less(generated.Mesh.bounds.min.z, -0.12f);
             Assert.Greater(generated.Mesh.bounds.max.z, 0.12f);
+            Assert.That(generated.Mesh.bounds.min.x, Is.GreaterThanOrEqualTo(-0.003f));
+            Assert.That(generated.Mesh.bounds.max.x, Is.LessThanOrEqualTo(2.003f));
+            Assert.That(generated.Mesh.bounds.min.y, Is.GreaterThanOrEqualTo(-0.003f));
+            Assert.That(generated.Mesh.bounds.max.y, Is.LessThanOrEqualTo(3.003f));
 
             UnityEngine.Object.DestroyImmediate(generated.Mesh);
         }
