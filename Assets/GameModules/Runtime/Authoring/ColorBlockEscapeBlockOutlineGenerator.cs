@@ -130,6 +130,23 @@ namespace ColorBlockEscape.Runtime.Authoring
                     turningVertices.Add(vertex.Coordinate);
             }
 
+            Dictionary<GridVertexCoordinate, List<BoardBoundaryEdge>> incidentEdges = new();
+            foreach (GridVertexCoordinate vertex in turningVertices)
+                incidentEdges.Add(vertex, new List<BoardBoundaryEdge>(2));
+            foreach (BoardBoundaryEdge edge in boundary.ExposedEdges)
+            {
+                if (incidentEdges.TryGetValue(edge.StartVertex,
+                        out List<BoardBoundaryEdge> startEdges))
+                    startEdges.Add(edge);
+                if (incidentEdges.TryGetValue(edge.EndVertex,
+                        out List<BoardBoundaryEdge> endEdges))
+                    endEdges.Add(edge);
+            }
+            foreach (KeyValuePair<GridVertexCoordinate, List<BoardBoundaryEdge>> pair in incidentEdges)
+                if (pair.Value.Count != 2)
+                    return ColorBlockEscapeBlockOutlineGenerationResult.Failed(
+                        $"Outline corner {pair.Key} must have exactly two incident boundary edges.");
+
             foreach (BoardBoundaryEdge edge in boundary.ExposedEdges)
             {
                 Vector2 outerStart = outerCapPoints[edge.StartVertex];
@@ -146,16 +163,11 @@ namespace ColorBlockEscape.Runtime.Authoring
                     AtDepth(innerStart, halfDepth + surfaceOffset),
                     AtDepth(innerEnd, halfDepth + surfaceOffset),
                     AtDepth(outerEnd, halfDepth + surfaceOffset));
-
-                if (turningVertices.Contains(edge.StartVertex))
-                    AppendSideRibbon(vertices, triangles, edge, edge.StartVertex,
-                        edge.EndVertex, layout, anchorOffset, halfDepth, bevelWidth,
-                        outlineWidth, surfaceOffset);
-                if (turningVertices.Contains(edge.EndVertex))
-                    AppendSideRibbon(vertices, triangles, edge, edge.EndVertex,
-                        edge.StartVertex, layout, anchorOffset, halfDepth, bevelWidth,
-                        outlineWidth, surfaceOffset);
             }
+            foreach (KeyValuePair<GridVertexCoordinate, List<BoardBoundaryEdge>> pair in incidentEdges)
+                AppendJoinedSideRibbons(vertices, triangles, pair.Key,
+                    pair.Value[0], pair.Value[1], layout, anchorOffset, halfDepth,
+                    bevelWidth, outlineWidth, surfaceOffset);
 
             Mesh mesh = new() { name = "CBE generated block outline" };
             if (vertices.Count > ushort.MaxValue) mesh.indexFormat = IndexFormat.UInt32;
@@ -222,12 +234,12 @@ namespace ColorBlockEscape.Runtime.Authoring
             _ => Vector2.zero
         };
 
-        private static void AppendSideRibbon(
+        private static void AppendJoinedSideRibbons(
             ICollection<Vector3> vertices,
             ICollection<int> triangles,
-            BoardBoundaryEdge edge,
             GridVertexCoordinate cornerVertex,
-            GridVertexCoordinate interiorVertex,
+            BoardBoundaryEdge firstEdge,
+            BoardBoundaryEdge secondEdge,
             GridWorldLayout layout,
             float anchorOffset,
             float halfDepth,
@@ -236,23 +248,51 @@ namespace ColorBlockEscape.Runtime.Authoring
             float surfaceOffset)
         {
             Vector2 corner = VertexPosition(cornerVertex, layout, anchorOffset);
-            Vector2 towardInterior =
-                (VertexPosition(interiorVertex, layout, anchorOffset) - corner).normalized;
-            Vector2 outward = edge.Direction switch
-            {
-                BoardEdgeDirection.North => Vector2.up,
-                BoardEdgeDirection.East => Vector2.right,
-                BoardEdgeDirection.South => Vector2.down,
-                _ => Vector2.left
-            };
-            corner += outward * surfaceOffset;
-            Vector2 inner = corner + towardInterior * outlineWidth;
+            Vector2 firstOutward = Outward(firstEdge.Direction);
+            Vector2 secondOutward = Outward(secondEdge.Direction);
+            Vector2 sharedCorner = corner + (firstOutward + secondOutward) * surfaceOffset;
             float top = -halfDepth + bevelWidth;
             float bottom = halfDepth - bevelWidth;
-            AppendDoubleSidedQuad(vertices, triangles,
-                AtDepth(corner, top), AtDepth(inner, top),
-                AtDepth(inner, bottom), AtDepth(corner, bottom));
+            AppendJoinedSideRibbon(vertices, triangles, cornerVertex, firstEdge,
+                corner, sharedCorner, firstOutward, layout, anchorOffset, top, bottom,
+                outlineWidth, surfaceOffset);
+            AppendJoinedSideRibbon(vertices, triangles, cornerVertex, secondEdge,
+                corner, sharedCorner, secondOutward, layout, anchorOffset, top, bottom,
+                outlineWidth, surfaceOffset);
         }
+
+        private static void AppendJoinedSideRibbon(
+            ICollection<Vector3> vertices,
+            ICollection<int> triangles,
+            GridVertexCoordinate cornerVertex,
+            BoardBoundaryEdge edge,
+            Vector2 corner,
+            Vector2 sharedCorner,
+            Vector2 outward,
+            GridWorldLayout layout,
+            float anchorOffset,
+            float top,
+            float bottom,
+            float outlineWidth,
+            float surfaceOffset)
+        {
+            GridVertexCoordinate interiorVertex = edge.StartVertex == cornerVertex
+                ? edge.EndVertex : edge.StartVertex;
+            Vector2 towardInterior =
+                (VertexPosition(interiorVertex, layout, anchorOffset) - corner).normalized;
+            Vector2 inner = corner + towardInterior * outlineWidth + outward * surfaceOffset;
+            AppendDoubleSidedQuad(vertices, triangles,
+                AtDepth(sharedCorner, top), AtDepth(inner, top),
+                AtDepth(inner, bottom), AtDepth(sharedCorner, bottom));
+        }
+
+        private static Vector2 Outward(BoardEdgeDirection direction) => direction switch
+        {
+            BoardEdgeDirection.North => Vector2.up,
+            BoardEdgeDirection.East => Vector2.right,
+            BoardEdgeDirection.South => Vector2.down,
+            _ => Vector2.left
+        };
 
         private static Vector3 AtDepth(Vector2 point, float depth) =>
             new(point.x, point.y, depth);

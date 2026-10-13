@@ -96,6 +96,28 @@ namespace ColorBlockEscape.Tests
         }
 
         [Test]
+        public void SideRibbonsShareOneOffsetCornerSpine()
+        {
+            GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
+            ColorBlockEscapeBlockOutlineGenerator generator = new();
+            ColorBlockEscapeBlockOutlineGenerationResult generated = generator.Generate(
+                BlockShapePresets.Get(BlockShapePreset.Single), layout,
+                0.24f, 0.04f, 0.018f, 0.001f);
+
+            Assert.IsTrue(generated.Success, generated.FailureReason);
+            int sharedSpineVertices = generated.Mesh.vertices.Count(vertex =>
+                Mathf.Abs(vertex.x - 1.001f) < 0.0001f &&
+                Mathf.Abs(vertex.y - 1.001f) < 0.0001f &&
+                Mathf.Abs(Mathf.Abs(vertex.z) - 0.08f) < 0.0001f);
+            Assert.AreEqual(4, sharedSpineVertices,
+                "Both side ribbons must reuse the same top and bottom corner-spine positions.");
+            Assert.That(generated.Mesh.bounds.max.x, Is.LessThanOrEqualTo(1.0011f));
+            Assert.That(generated.Mesh.bounds.max.y, Is.LessThanOrEqualTo(1.0011f));
+
+            UnityEngine.Object.DestroyImmediate(generated.Mesh);
+        }
+
+        [Test]
         public void EditorAndRuntimeBlocksShareUnifiedGeneratedMeshAndGameOwnedColor()
         {
             ColorBlockEscapeAuthoringSession model = ReadyModel();
