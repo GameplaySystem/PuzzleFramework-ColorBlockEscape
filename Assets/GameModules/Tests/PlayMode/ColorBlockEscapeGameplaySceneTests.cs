@@ -35,7 +35,13 @@ namespace ColorBlockEscape.Tests
                 "The standalone scene must use the configured modular board prefab.");
             Assert.IsTrue(controller.Level.FrameworkContext.CellOccupancySystem.IsOccupied(
                 new GridCoordinate(2, 4)));
-            Assert.IsNotNull(controller.BlockViews["red-bar"].GetComponent<MeshFilter>());
+            Transform redBarView = controller.BlockViews["red-bar"];
+            Assert.IsNotNull(redBarView.GetComponent<MeshFilter>());
+            Transform outline = redBarView.Find("Block outline");
+            Assert.IsNotNull(outline, "Runtime blocks must include the structural outline view.");
+            Assert.IsNotNull(outline.GetComponent<MeshFilter>().sharedMesh);
+            Assert.IsNull(outline.GetComponent<Collider>(),
+                "Presentation outlines must not participate in gameplay collision.");
 
             Camera camera = Camera.main;
             Assert.IsNotNull(camera);

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using ColorBlockEscape.Runtime;
@@ -67,6 +68,31 @@ namespace ColorBlockEscape.Tests
         }
 
         [Test]
+        public void GeneratedOutlineCoversTopBottomAndEveryFootprintCorner()
+        {
+            IReadOnlyList<GridCoordinate> offsets = BlockShapePresets.Get(BlockShapePreset.L);
+            GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
+            ColorBlockEscapeBlockOutlineGenerator generator = new();
+
+            ColorBlockEscapeBlockOutlineGenerationResult generated = generator.Generate(
+                offsets, layout, 0.24f, 0.04f, 0.025f, 0.002f);
+
+            Assert.IsTrue(generated.Success, generated.FailureReason);
+            Assert.AreEqual(20, generated.PerimeterSegmentCount,
+                "The ten exposed footprint edges need both a top and a bottom segment.");
+            Assert.AreEqual(6, generated.VerticalSegmentCount,
+                "The L footprint has five convex corners and one concave corner.");
+            Assert.AreEqual(26, generated.TotalSegmentCount);
+            Assert.AreEqual(generated.TotalSegmentCount * 8, generated.Mesh.vertexCount);
+            Assert.AreEqual(generated.TotalSegmentCount * 36,
+                generated.Mesh.triangles.Length);
+            Assert.Less(generated.Mesh.bounds.min.z, -0.12f);
+            Assert.Greater(generated.Mesh.bounds.max.z, 0.12f);
+
+            UnityEngine.Object.DestroyImmediate(generated.Mesh);
+        }
+
+        [Test]
         public void EditorAndRuntimeBlocksShareUnifiedGeneratedMeshAndGameOwnedColor()
         {
             ColorBlockEscapeAuthoringSession model = ReadyModel();
@@ -90,8 +116,17 @@ namespace ColorBlockEscape.Tests
                 Mesh runtimeMesh = runtimeBlock.GetComponent<MeshFilter>().sharedMesh;
                 Assert.IsNotNull(editorMesh);
                 Assert.AreSame(editorMesh, runtimeMesh);
-                Assert.AreEqual(0, editorBlock.childCount);
+                Assert.AreEqual(1, editorBlock.childCount);
                 Assert.AreEqual(1, meshes.CachedMeshCount);
+                Assert.AreEqual(1, meshes.OutlineCachedMeshCount);
+                Transform editorOutline = editorBlock.Find("Block outline");
+                Transform runtimeOutline = runtimeBlock.Find("Block outline");
+                Assert.IsNotNull(editorOutline);
+                Assert.IsNotNull(runtimeOutline);
+                Mesh editorOutlineMesh = editorOutline.GetComponent<MeshFilter>().sharedMesh;
+                Mesh runtimeOutlineMesh = runtimeOutline.GetComponent<MeshFilter>().sharedMesh;
+                Assert.IsNotNull(editorOutlineMesh);
+                Assert.AreSame(editorOutlineMesh, runtimeOutlineMesh);
                 Color expectedTint = ColorBlockEscapeAuthoringView.Tint(ColorIdentity.Slot0);
                 Color actualTint = editorBlock.GetComponent<MeshRenderer>().sharedMaterial.color;
                 Assert.That(actualTint.r, Is.EqualTo(expectedTint.r).Within(0.0001f));
