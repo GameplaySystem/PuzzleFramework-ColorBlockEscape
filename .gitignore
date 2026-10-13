@@ -15,6 +15,22 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Local environment, signing material, and developer diagnostics.
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pem
+*.cer
+*.crt
+*.mobileprovision
+*.dmp
+*-diagnostic.*
+*-diagnostics.*
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta
