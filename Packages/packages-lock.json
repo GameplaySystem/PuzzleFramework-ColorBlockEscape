@@ -1,11 +1,11 @@
 {
   "dependencies": {
     "com.gaming.puzzleframework": {
-      "version": "https://github.com/GameplaySystem/PuzzleFramework.git?path=/Packages/com.gaming.puzzleframework#94378d44ad49bcab2558e978613651744a75c037",
+      "version": "https://github.com/GameplaySystem/PuzzleFramework.git?path=/Packages/com.gaming.puzzleframework#5c0d5ec8755497931e044ae51066cf1a54967d80",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "94378d44ad49bcab2558e978613651744a75c037"
+      "hash": "5c0d5ec8755497931e044ae51066cf1a54967d80"
     },
     "com.unity.ai.navigation": {
       "version": "2.0.12",

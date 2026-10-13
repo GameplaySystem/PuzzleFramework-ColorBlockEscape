@@ -68,57 +68,43 @@ namespace ColorBlockEscape.Tests
         }
 
         [Test]
-        public void GeneratedOutlineCoversTopBottomAndEveryFootprintCorner()
+        public void GeneratedPhysicalEdgesSeparateBevelsAndEveryFootprintCorner()
         {
             IReadOnlyList<GridCoordinate> offsets = BlockShapePresets.Get(BlockShapePreset.L);
             GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
-            ColorBlockEscapeBlockOutlineGenerator generator = new();
+            using ColorBlockEscapeBlockMeshPresentation presentation = new();
 
-            ColorBlockEscapeBlockOutlineGenerationResult generated = generator.Generate(
-                offsets, layout, 0.24f, 0.04f, 0.025f, 0.002f);
+            FootprintMeshGenerationResult generated = presentation.GetOrCreate(offsets, layout);
 
             Assert.IsTrue(generated.Success, generated.FailureReason);
-            Assert.AreEqual(20, generated.PerimeterSegmentCount,
-                "The ten exposed footprint edges need both a top and a bottom segment.");
-            Assert.AreEqual(6, generated.VerticalSegmentCount,
-                "The L footprint has five convex corners and one concave corner.");
-            Assert.AreEqual(26, generated.TotalSegmentCount);
-            Assert.Greater(generated.Mesh.vertexCount, 0);
-            Assert.AreEqual(0, generated.Mesh.triangles.Length % 3);
-            Assert.Less(generated.Mesh.bounds.min.z, -0.12f);
-            Assert.Greater(generated.Mesh.bounds.max.z, 0.12f);
-            Assert.That(generated.Mesh.bounds.min.x, Is.GreaterThanOrEqualTo(-0.003f));
-            Assert.That(generated.Mesh.bounds.max.x, Is.LessThanOrEqualTo(2.003f));
-            Assert.That(generated.Mesh.bounds.min.y, Is.GreaterThanOrEqualTo(-0.003f));
-            Assert.That(generated.Mesh.bounds.max.y, Is.LessThanOrEqualTo(3.003f));
-
-            UnityEngine.Object.DestroyImmediate(generated.Mesh);
+            Assert.IsTrue(generated.HasSeparateEdgeSurfaces);
+            Assert.AreEqual(2, generated.Mesh.subMeshCount);
+            Assert.AreEqual(12, generated.ContourVertexCount,
+                "The L footprint's six turns each become one physical corner chamfer.");
+            Assert.AreEqual(32, generated.Mesh.GetTriangles(0).Length / 3);
+            Assert.AreEqual(108, generated.Mesh.GetTriangles(1).Length / 3);
+            Assert.AreEqual(140, generated.TriangleCount);
         }
 
         [Test]
-        public void SideRibbonsShareOneOffsetCornerSpine()
+        public void PhysicalEdgesStayWithinBlockBoundsWithoutOffsetGeometry()
         {
             GridWorldLayout layout = ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
-            ColorBlockEscapeBlockOutlineGenerator generator = new();
-            ColorBlockEscapeBlockOutlineGenerationResult generated = generator.Generate(
-                BlockShapePresets.Get(BlockShapePreset.Single), layout,
-                0.24f, 0.04f, 0.018f, 0.001f);
+            using ColorBlockEscapeBlockMeshPresentation presentation = new();
+            FootprintMeshGenerationResult generated = presentation.GetOrCreate(
+                BlockShapePresets.Get(BlockShapePreset.Single), layout);
 
             Assert.IsTrue(generated.Success, generated.FailureReason);
-            int sharedSpineVertices = generated.Mesh.vertices.Count(vertex =>
-                Mathf.Abs(vertex.x - 1.001f) < 0.0001f &&
-                Mathf.Abs(vertex.y - 1.001f) < 0.0001f &&
-                Mathf.Abs(Mathf.Abs(vertex.z) - 0.08f) < 0.0001f);
-            Assert.AreEqual(4, sharedSpineVertices,
-                "Both side ribbons must reuse the same top and bottom corner-spine positions.");
-            Assert.That(generated.Mesh.bounds.max.x, Is.LessThanOrEqualTo(1.0011f));
-            Assert.That(generated.Mesh.bounds.max.y, Is.LessThanOrEqualTo(1.0011f));
-
-            UnityEngine.Object.DestroyImmediate(generated.Mesh);
+            Assert.That(generated.Mesh.bounds.min.x, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(generated.Mesh.bounds.min.y, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(generated.Mesh.bounds.min.z, Is.EqualTo(-0.12f).Within(0.0001f));
+            Assert.That(generated.Mesh.bounds.max.x, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(generated.Mesh.bounds.max.y, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(generated.Mesh.bounds.max.z, Is.EqualTo(0.12f).Within(0.0001f));
         }
 
         [Test]
-        public void EditorAndRuntimeBlocksShareUnifiedGeneratedMeshAndGameOwnedColor()
+        public void EditorAndRuntimeBlocksSharePhysicalEdgeMeshAndGameOwnedMaterials()
         {
             ColorBlockEscapeAuthoringSession model = ReadyModel();
             Assert.IsTrue(model.TryBeginPlayTest(out ColorBlockEscapeRuntimeLevel runtime,
@@ -141,23 +127,25 @@ namespace ColorBlockEscape.Tests
                 Mesh runtimeMesh = runtimeBlock.GetComponent<MeshFilter>().sharedMesh;
                 Assert.IsNotNull(editorMesh);
                 Assert.AreSame(editorMesh, runtimeMesh);
-                Assert.AreEqual(1, editorBlock.childCount);
+                Assert.AreEqual(0, editorBlock.childCount);
                 Assert.AreEqual(1, meshes.CachedMeshCount);
-                Assert.AreEqual(1, meshes.OutlineCachedMeshCount);
-                Transform editorOutline = editorBlock.Find("Block outline");
-                Transform runtimeOutline = runtimeBlock.Find("Block outline");
-                Assert.IsNotNull(editorOutline);
-                Assert.IsNotNull(runtimeOutline);
-                Mesh editorOutlineMesh = editorOutline.GetComponent<MeshFilter>().sharedMesh;
-                Mesh runtimeOutlineMesh = runtimeOutline.GetComponent<MeshFilter>().sharedMesh;
-                Assert.IsNotNull(editorOutlineMesh);
-                Assert.AreSame(editorOutlineMesh, runtimeOutlineMesh);
+                Assert.AreEqual(2, editorMesh.subMeshCount);
+                Assert.IsTrue(editorMesh.GetTriangles(0).Length > 0);
+                Assert.IsTrue(editorMesh.GetTriangles(1).Length > 0);
                 Color expectedTint = ColorBlockEscapeAuthoringView.Tint(ColorIdentity.Slot0);
-                Color actualTint = editorBlock.GetComponent<MeshRenderer>().sharedMaterial.color;
+                Material[] materials = editorBlock.GetComponent<MeshRenderer>().sharedMaterials;
+                Assert.AreEqual(2, materials.Length);
+                Color actualTint = materials[0].color;
                 Assert.That(actualTint.r, Is.EqualTo(expectedTint.r).Within(0.0001f));
                 Assert.That(actualTint.g, Is.EqualTo(expectedTint.g).Within(0.0001f));
                 Assert.That(actualTint.b, Is.EqualTo(expectedTint.b).Within(0.0001f));
                 Assert.That(actualTint.a, Is.EqualTo(expectedTint.a).Within(0.0001f));
+                Color actualEdge = materials[1].color;
+                Color expectedEdge = meshes.EdgeColor;
+                Assert.That(actualEdge.r, Is.EqualTo(expectedEdge.r).Within(0.0001f));
+                Assert.That(actualEdge.g, Is.EqualTo(expectedEdge.g).Within(0.0001f));
+                Assert.That(actualEdge.b, Is.EqualTo(expectedEdge.b).Within(0.0001f));
+                Assert.That(actualEdge.a, Is.EqualTo(expectedEdge.a).Within(0.0001f));
                 Assert.That(editorMesh.bounds.size.x, Is.EqualTo(2f).Within(0.0001f));
                 Assert.That(editorMesh.bounds.size.y, Is.EqualTo(1f).Within(0.0001f));
                 Assert.That(editorMesh.bounds.size.z, Is.EqualTo(0.24f).Within(0.0001f));

@@ -3,7 +3,6 @@ using PuzzleFramework.Content;
 using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Presentation;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace ColorBlockEscape.Runtime.Authoring
 {
@@ -218,7 +217,6 @@ namespace ColorBlockEscape.Runtime.Authoring
             block.transform.rotation = ColorBlockEscapeBoardSpace.FootprintRotation(layout);
             FootprintMeshGenerationResult generated =
                 blockMeshPresentation.GetOrCreate(offsets, layout);
-            AddOutline(block, offsets, layout, blockMeshPresentation);
             if (!generated.Success)
             {
                 Debug.LogWarning(
@@ -242,32 +240,14 @@ namespace ColorBlockEscape.Runtime.Authoring
             MeshFilter filter = block.AddComponent<MeshFilter>();
             filter.sharedMesh = generated.Mesh;
             MeshRenderer renderer = block.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = MaterialFor(Tint(color));
+            renderer.sharedMaterials = generated.HasSeparateEdgeSurfaces
+                ? new[]
+                {
+                    MaterialFor(Tint(color)),
+                    MaterialFor(blockMeshPresentation.EdgeColor)
+                }
+                : new[] { MaterialFor(Tint(color)) };
             return block.transform;
-        }
-
-        private static void AddOutline(GameObject block,
-            IReadOnlyList<GridCoordinate> offsets,
-            GridWorldLayout layout,
-            ColorBlockEscapeBlockMeshPresentation blockMeshPresentation)
-        {
-            ColorBlockEscapeBlockOutlineGenerationResult generated =
-                blockMeshPresentation.GetOrCreateOutline(offsets, layout);
-            if (!generated.Success)
-            {
-                Debug.LogWarning($"Block '{block.name}' has no structural outline: " +
-                                 generated.FailureReason);
-                return;
-            }
-
-            GameObject outline = new("Block outline");
-            outline.transform.SetParent(block.transform, false);
-            MeshFilter filter = outline.AddComponent<MeshFilter>();
-            filter.sharedMesh = generated.Mesh;
-            MeshRenderer renderer = outline.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = MaterialFor(blockMeshPresentation.OutlineColor);
-            renderer.shadowCastingMode = ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
         }
 
         private static bool IsOpening(IReadOnlyList<ExitViewData> exits, BoardBoundaryEdge edge)

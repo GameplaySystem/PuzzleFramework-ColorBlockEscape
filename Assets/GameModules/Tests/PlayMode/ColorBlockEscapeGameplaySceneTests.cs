@@ -36,12 +36,14 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(controller.Level.FrameworkContext.CellOccupancySystem.IsOccupied(
                 new GridCoordinate(2, 4)));
             Transform redBarView = controller.BlockViews["red-bar"];
-            Assert.IsNotNull(redBarView.GetComponent<MeshFilter>());
-            Transform outline = redBarView.Find("Block outline");
-            Assert.IsNotNull(outline, "Runtime blocks must include the structural outline view.");
-            Assert.IsNotNull(outline.GetComponent<MeshFilter>().sharedMesh);
-            Assert.IsNull(outline.GetComponent<Collider>(),
-                "Presentation outlines must not participate in gameplay collision.");
+            MeshFilter blockFilter = redBarView.GetComponent<MeshFilter>();
+            MeshRenderer blockRenderer = redBarView.GetComponent<MeshRenderer>();
+            Assert.IsNotNull(blockFilter);
+            Assert.AreEqual(2, blockFilter.sharedMesh.subMeshCount,
+                "Runtime blocks must expose physical body and edge surfaces.");
+            Assert.AreEqual(2, blockRenderer.sharedMaterials.Length);
+            Assert.IsNull(redBarView.Find("Block outline"),
+                "Physical edge surfaces must not use an overlapping child mesh.");
 
             Camera camera = Camera.main;
             Assert.IsNotNull(camera);
