@@ -67,7 +67,12 @@ namespace ColorBlockEscape.Runtime
                     if (block.Lifecycle == BlockLifecycle.Exiting)
                         PositionView(block.Id, _layout.BoardLocalToWorld(block.ContinuousOrigin));
                     else if (block.Lifecycle == BlockLifecycle.Removed)
+                    {
+                        // Presentation still needs the authoritative final pose when a large frame
+                        // step completes exit travel before the chipper emits its trailing samples.
+                        PositionView(block.Id, _layout.BoardLocalToWorld(block.ContinuousOrigin));
                         _views[block.Id].gameObject.SetActive(false);
+                    }
                 }
             }
             if ((_outcome == null || _outcome.State == GameState.Playing) &&

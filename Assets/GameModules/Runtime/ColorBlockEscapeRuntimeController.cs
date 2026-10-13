@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ColorBlockEscape.Runtime.Authoring;
+using ColorBlockEscape.Runtime.Presentation;
 using PuzzleFramework.Content;
 using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Presentation;
@@ -24,6 +25,7 @@ namespace ColorBlockEscape.Runtime
         [SerializeField, Range(0.01f, 1f)] private float _captureOverlapFraction = 0.70f;
         [SerializeField, Min(0f)] private float _captureDistanceCells = 0.35f;
         [SerializeField, Min(0.01f)] private float _exitSpeedCellsPerSecond = 3f;
+        [SerializeField] private ColorBlockEscapeChipperSettings _chipperSettings = new();
         [SerializeField] private bool _showHud = true;
         [Header("Camera")]
         [SerializeField, Range(1f, 89f)] private float _cameraPitchDegrees =
@@ -45,7 +47,10 @@ namespace ColorBlockEscape.Runtime
         private GameObject _runtimeRoot;
         private Dictionary<string, Transform> _blockViews;
         private PlainBlockDragAdapter _dragAdapter;
+        private ColorBlockEscapeChipperPresenter _chipperPresenter;
+        private ColorBlockEscapePresentationGate _presentationGate;
         private ExitCaptureSettings _activeExitSettings;
+        private ColorBlockEscapeChipperSettings _activeChipperSettings;
         private string _statusMessage = "Waiting for level data.";
         private int _selectedLevelIndex = -1;
 
@@ -57,6 +62,10 @@ namespace ColorBlockEscape.Runtime
         public ColorBlockEscapeRuntimeLevel Level => _session?.Level;
         public ColorBlockEscapeOutcomeSession Outcome => _session?.Outcome;
         public PlainBlockDragAdapter DragAdapter => _dragAdapter;
+        public ColorBlockEscapeChipperPresenter ChipperPresenter => _chipperPresenter;
+        public bool IsResultPresentationVisible =>
+            _session != null && _session.Outcome.State != GameState.Playing &&
+            (_presentationGate?.IsResultVisible ?? true);
         public IReadOnlyDictionary<string, Transform> BlockViews => _blockViews;
 
         private void Awake()
@@ -79,8 +88,17 @@ namespace ColorBlockEscape.Runtime
 
         private void OnDestroy()
         {
+            _chipperPresenter?.ResetPresentation();
             if (_ownsBlockMeshPresentation) _blockMeshPresentation?.Dispose();
             _blockMeshPresentation = null;
+        }
+
+        private void LateUpdate()
+        {
+            if (_session == null) return;
+            _chipperPresenter?.Advance(Time.deltaTime);
+            _presentationGate?.Advance(_session.Outcome.State,
+                _chipperPresenter != null && _chipperPresenter.IsBusy, Time.unscaledDeltaTime);
         }
 
         /// <summary>Loads and starts one authored JSON asset selected by scene configuration.</summary>
@@ -110,7 +128,8 @@ namespace ColorBlockEscape.Runtime
         public bool TryStart(LevelDefinition definition, Camera sceneCamera = null,
             ModularBoardCellView boardCellPrefab = null,
             ColorBlockEscapeBlockMeshPresentation blockMeshPresentation = null,
-            ExitCaptureSettings exitSettings = null, bool showHud = true)
+            ExitCaptureSettings exitSettings = null, bool showHud = true,
+            ColorBlockEscapeChipperSettings chipperSettings = null)
         {
             if (definition == null)
             {
@@ -135,9 +154,12 @@ namespace ColorBlockEscape.Runtime
 
             _showHud = showHud;
             ExitCaptureSettings requestedSettings = exitSettings ?? CreateExitSettings();
-            if (!BuildFresh(definition, requestedSettings)) return false;
+            ColorBlockEscapeChipperSettings requestedChipperSettings =
+                chipperSettings ?? _chipperSettings ?? new ColorBlockEscapeChipperSettings();
+            if (!BuildFresh(definition, requestedSettings, requestedChipperSettings)) return false;
             _sourceDefinition = definition;
             _activeExitSettings = requestedSettings;
+            _activeChipperSettings = requestedChipperSettings;
             return true;
         }
 
@@ -149,10 +171,13 @@ namespace ColorBlockEscape.Runtime
                 _statusMessage = "No gameplay level is available to restart.";
                 return false;
             }
-            return BuildFresh(_sourceDefinition, _activeExitSettings ?? CreateExitSettings());
+            return BuildFresh(_sourceDefinition, _activeExitSettings ?? CreateExitSettings(),
+                _activeChipperSettings ?? _chipperSettings ??
+                new ColorBlockEscapeChipperSettings());
         }
 
-        private bool BuildFresh(LevelDefinition definition, ExitCaptureSettings exitSettings)
+        private bool BuildFresh(LevelDefinition definition, ExitCaptureSettings exitSettings,
+            ColorBlockEscapeChipperSettings chipperSettings)
         {
             if (!ColorBlockEscapeRuntimeSession.TryCreate(definition,
                     out ColorBlockEscapeRuntimeSession session, out string failure))
@@ -172,6 +197,11 @@ namespace ColorBlockEscape.Runtime
             _dragAdapter = _runtimeRoot.AddComponent<PlainBlockDragAdapter>();
             _dragAdapter.Initialize(session.Level, _layout, _camera, _blockViews,
                 exitSettings, session.Outcome);
+            _chipperPresenter = _runtimeRoot.AddComponent<ColorBlockEscapeChipperPresenter>();
+            _chipperPresenter.Initialize(session.Level, _layout, _blockViews,
+                _blockMeshPresentation.Depth, chipperSettings);
+            _presentationGate = new ColorBlockEscapePresentationGate(
+                chipperSettings.PostEffectDelay, chipperSettings.MaximumWaitTimeout);
             FrameCamera(definition.FrameworkData.Board);
             _statusMessage = $"Playing {definition.Metadata.DisplayName}.";
             return true;
@@ -179,8 +209,11 @@ namespace ColorBlockEscape.Runtime
 
         private void ClearRuntimeObjects()
         {
+            _chipperPresenter?.ResetPresentation();
             _session = null;
             _dragAdapter = null;
+            _chipperPresenter = null;
+            _presentationGate = null;
             _blockViews = null;
             if (_runtimeRoot == null) return;
             _runtimeRoot.SetActive(false);
@@ -258,8 +291,10 @@ namespace ColorBlockEscape.Runtime
             }
             GUILayout.Label($"Time: {_session.Outcome.RemainingSeconds:0.0}s");
             GameState state = _session.Outcome.State;
-            GUILayout.Label(state == GameState.Playing ? "Clear every block." :
-                state == GameState.Won ? "LEVEL COMPLETE" : "TIME UP");
+            if (state == GameState.Playing) GUILayout.Label("Clear every block.");
+            else if (IsResultPresentationVisible)
+                GUILayout.Label(state == GameState.Won ? "LEVEL COMPLETE" : "TIME UP");
+            else GUILayout.Label("Finishing...");
             if (GUILayout.Button("Restart")) RestartCurrentLevel();
             if (LevelCount > 1)
             {

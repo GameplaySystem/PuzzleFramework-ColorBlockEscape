@@ -1,6 +1,7 @@
 using System.Collections;
 using ColorBlockEscape.Runtime;
 using ColorBlockEscape.Runtime.Authoring;
+using ColorBlockEscape.Runtime.Presentation;
 using NUnit.Framework;
 using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Presentation;
@@ -31,6 +32,7 @@ namespace ColorBlockEscape.Tests
             Assert.AreEqual(3, controller.Level.Exits.Count);
             Assert.AreEqual(3, controller.BlockViews.Count);
             Assert.IsNotNull(controller.DragAdapter);
+            Assert.IsNotNull(controller.ChipperPresenter);
             Assert.IsNotNull(GameObject.Find("Modular board visuals"),
                 "The standalone scene must use the configured modular board prefab.");
             Assert.IsTrue(controller.Level.FrameworkContext.CellOccupancySystem.IsOccupied(
@@ -98,9 +100,16 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(first.Level.Exits[0].IsBusy);
             yield return null;
             Assert.AreEqual(GameState.Won, first.Outcome.State);
+            Assert.IsTrue(controller.ChipperPresenter.IsBusy);
+            Assert.IsFalse(controller.IsResultPresentationVisible);
 
+            ColorBlockEscapeChipperPresenter firstPresenter = controller.ChipperPresenter;
             Assert.IsTrue(controller.RestartCurrentLevel(), controller.StatusMessage);
             Assert.AreNotSame(first, controller.Session);
+            Assert.AreNotSame(firstPresenter, controller.ChipperPresenter);
+            Assert.AreEqual(0, controller.ChipperPresenter.ActiveEffectCount);
+            Assert.AreEqual(0, controller.ChipperPresenter.ActiveFragmentCount);
+            Assert.IsFalse(controller.IsResultPresentationVisible);
             Assert.AreEqual(GameState.Playing, controller.Outcome.State);
             Assert.AreEqual(5f, controller.Outcome.RemainingSeconds, 0.0001f);
             Assert.AreEqual(BlockLifecycle.OnBoard, controller.Level.Blocks[0].Lifecycle);
@@ -108,6 +117,67 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(controller.Level.FrameworkContext.CellOccupancySystem.IsOccupied(
                 new GridCoordinate(2, 5)));
             Assert.IsNotNull(controller.DragAdapter);
+        }
+
+        [UnityTest]
+        public IEnumerator AcceptedBlockClipsEmitsFragmentsAndEventuallyRevealsCommittedWin()
+        {
+            yield return SceneManager.LoadSceneAsync(SceneName, LoadSceneMode.Single);
+            yield return null;
+            ColorBlockEscapeRuntimeController controller =
+                Object.FindFirstObjectByType<ColorBlockEscapeRuntimeController>();
+            Camera camera = Camera.main;
+            ColorBlockEscapeAuthoringSession authored = new(6, 6);
+            Assert.IsTrue(authored.SetTimer(5f, 1f).Success);
+            Assert.IsTrue(authored.PlaceBlock("chipper-block", new GridCoordinate(2, 5),
+                BlockShapePresets.Get(BlockShapePreset.Single), ColorIdentity.Slot0).Success);
+            Assert.IsTrue(authored.PutExit("chipper-exit", ExitSide.Top,
+                new GridCoordinate(2, 5), 1, ColorIdentity.Slot0).Success);
+            Assert.IsTrue(authored.TryCreateLevel(out var definition, out string failure), failure);
+            ColorBlockEscapeChipperSettings chipper = new(
+                xySubdivision: 2,
+                depthLayers: 1,
+                fragmentGap: 0.02f,
+                baseDuration: 0.08f,
+                durationVariation: 0f,
+                releaseStagger: 0f,
+                staggerVariation: 0f,
+                forwardTravelDistance: 0.3f,
+                forwardVariation: 0f,
+                sidewaysScatter: 0f,
+                arcHeight: 0.1f,
+                arcVariation: 0f,
+                prewarmCount: 4,
+                maximumFragmentCount: 4,
+                postEffectDelay: 0.02f,
+                maximumWaitTimeout: 1f);
+            Assert.IsTrue(controller.TryStart(definition, camera,
+                exitSettings: new ExitCaptureSettings(0.70f, 0.35f, 5f),
+                showHud: false, chipperSettings: chipper), controller.StatusMessage);
+
+            Vector2 grab = camera.WorldToScreenPoint(World(2.5f, 5.5f));
+            controller.DragAdapter.ProcessPointerSample(0, grab, true, true, false);
+            Vector2 outward = camera.WorldToScreenPoint(World(2.5f, 6.6f));
+            controller.DragAdapter.ProcessPointerSample(0, outward, false, true, false);
+            Assert.AreEqual(BlockLifecycle.Exiting, controller.Level.Blocks[0].Lifecycle);
+            controller.ChipperPresenter.Advance(0f);
+            Assert.IsTrue(controller.ChipperPresenter.IsBusy);
+            MeshRenderer renderer = controller.BlockViews["chipper-block"]
+                .GetComponent<MeshRenderer>();
+            Assert.AreEqual("ColorBlockEscape/ChipperClippedUnlit",
+                renderer.sharedMaterial.shader.name);
+
+            float timeout = Time.realtimeSinceStartup + 2f;
+            while (!controller.IsResultPresentationVisible && Time.realtimeSinceStartup < timeout)
+                yield return null;
+
+            Assert.AreEqual(GameState.Won, controller.Outcome.State,
+                "Presentation must not own or reverse the accepted gameplay result.");
+            Assert.IsTrue(controller.IsResultPresentationVisible);
+            Assert.IsFalse(controller.ChipperPresenter.IsBusy);
+            Assert.AreEqual(0, controller.ChipperPresenter.ActiveFragmentCount);
+            Assert.AreEqual(0, controller.ChipperPresenter.SkippedFragmentCount);
+            Assert.AreEqual(BlockLifecycle.Removed, controller.Level.Blocks[0].Lifecycle);
         }
 
         private static Vector3 World(float x, float y) =>
