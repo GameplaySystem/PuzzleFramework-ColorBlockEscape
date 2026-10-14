@@ -51,7 +51,7 @@ namespace ColorBlockEscape.Tests
             Assert.IsNotNull(camera);
             Assert.IsFalse(camera.orthographic);
             Assert.That(camera.transform.eulerAngles.x,
-                Is.EqualTo(ColorBlockEscapeBoardCamera.DefaultPitchDegrees).Within(0.01f));
+                Is.EqualTo(controller.CameraPitchDegrees).Within(0.01f));
             Assert.IsTrue(controller.Level.TryGetBlock("red-bar", out BlockRuntimeState block));
             Assert.That(controller.BlockViews["red-bar"].position.y, Is.GreaterThan(0f));
             Assert.That(controller.BlockViews["red-bar"].position.z, Is.EqualTo(4f).Within(0.001f));

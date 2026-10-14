@@ -63,6 +63,7 @@ namespace ColorBlockEscape.Runtime
         public ColorBlockEscapeOutcomeSession Outcome => _session?.Outcome;
         public PlainBlockDragAdapter DragAdapter => _dragAdapter;
         public ColorBlockEscapeChipperPresenter ChipperPresenter => _chipperPresenter;
+        public float CameraPitchDegrees => _cameraPitchDegrees;
         public bool IsResultPresentationVisible =>
             _session != null && _session.Outcome.State != GameState.Playing &&
             (_presentationGate?.IsResultVisible ?? true);
