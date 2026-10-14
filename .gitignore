@@ -120,3 +120,7 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Unity scene recovery snapshots are local crash/restore data.
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
