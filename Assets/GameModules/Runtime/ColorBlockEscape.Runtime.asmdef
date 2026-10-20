@@ -1,6 +1,11 @@
 {
   "name": "ColorBlockEscape.Runtime",
   "rootNamespace": "ColorBlockEscape.Runtime",
-  "references": ["PuzzleFramework.Runtime", "Unity.InputSystem"],
+  "references": [
+    "PuzzleFramework.Runtime",
+    "Unity.InputSystem",
+    "Unity.TextMeshPro",
+    "Unity.ugui"
+  ],
   "autoReferenced": true
 }

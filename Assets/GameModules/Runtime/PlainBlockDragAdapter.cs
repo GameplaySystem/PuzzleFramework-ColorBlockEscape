@@ -4,6 +4,7 @@ using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Interaction;
 using PuzzleFramework.RuntimeFlow;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace ColorBlockEscape.Runtime
@@ -26,8 +27,10 @@ namespace ColorBlockEscape.Runtime
         private Dictionary<string, Vector3> _viewOffsets;
         private PuzzleFramework.Interaction.InputSystem _input;
         private int _activePointerId = -1;
+        private bool _pointerInputSuspended;
 
         public string ActiveBlockId => _movement?.ActiveBlockId;
+        public bool IsPointerInputSuspended => _pointerInputSuspended;
 
         public void Initialize(ColorBlockEscapeRuntimeLevel level, GridWorldLayout layout,
             Camera sceneCamera, IReadOnlyDictionary<string, Transform> blockViews,
@@ -58,7 +61,7 @@ namespace ColorBlockEscape.Runtime
             if (_movement == null) return;
             _outcome?.AdvanceTime(Time.deltaTime);
             if (_outcome != null && _outcome.State != GameState.Playing)
-                FinishActiveDragForTerminalState();
+                FinishActiveDrag();
             if (_exitCapture != null)
             {
                 _exitCapture.Advance(Time.deltaTime);
@@ -75,11 +78,21 @@ namespace ColorBlockEscape.Runtime
                     }
                 }
             }
-            if ((_outcome == null || _outcome.State == GameState.Playing) &&
+            if (!_pointerInputSuspended &&
+                (_outcome == null || _outcome.State == GameState.Playing) &&
                 TryReadPointer(out int id, out Vector2 screen,
-                    out bool pressed, out bool held, out bool released))
+                    out bool pressed, out bool held, out bool released) &&
+                !IsPointerOverUi(id))
                 ProcessPointerSample(id, screen, pressed, held, released);
             _outcome?.ResolveBoundary();
+        }
+
+        /// <summary>Ends any active drag and ignores pointer samples until restored.</summary>
+        public void SetPointerInputSuspended(bool suspended)
+        {
+            if (_pointerInputSuspended == suspended) return;
+            _pointerInputSuspended = suspended;
+            if (suspended) FinishActiveDrag();
         }
 
         /// <summary>Applies one screen-space pointer sample through the shared drag lifecycle.</summary>
@@ -87,6 +100,7 @@ namespace ColorBlockEscape.Runtime
             bool pressed, bool held, bool released)
         {
             if (_movement == null) throw new InvalidOperationException("Adapter is not initialized.");
+            if (_pointerInputSuspended) return;
             if (_outcome != null && _outcome.State != GameState.Playing) return;
             if (_activePointerId >= 0 && _activePointerId != id) return;
             if (!BoardPointerProjection.TryProject(_camera.ScreenPointToRay(screen),
@@ -132,7 +146,7 @@ namespace ColorBlockEscape.Runtime
             return null;
         }
 
-        private void FinishActiveDragForTerminalState()
+        private void FinishActiveDrag()
         {
             if (_activePointerId < 0) return;
             string blockId = _movement.ActiveBlockId;
@@ -179,6 +193,14 @@ namespace ColorBlockEscape.Runtime
             screen = default;
             pressed = held = released = false;
             return false;
+        }
+
+        private static bool IsPointerOverUi(int pointerId)
+        {
+            if (EventSystem.current == null) return false;
+            return Touchscreen.current != null && Touchscreen.current.primaryTouch.press.isPressed
+                ? EventSystem.current.IsPointerOverGameObject(pointerId)
+                : EventSystem.current.IsPointerOverGameObject();
         }
 
         private sealed class BlockDrag : IDraggable

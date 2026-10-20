@@ -7,6 +7,7 @@ using PuzzleFramework.CoreBoard;
 using PuzzleFramework.Presentation;
 using PuzzleFramework.RuntimeFlow;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace ColorBlockEscape.Runtime
 {
@@ -26,7 +27,8 @@ namespace ColorBlockEscape.Runtime
         [SerializeField, Min(0f)] private float _captureDistanceCells = 0.35f;
         [SerializeField, Min(0.01f)] private float _exitSpeedCellsPerSecond = 3f;
         [SerializeField] private ColorBlockEscapeChipperSettings _chipperSettings = new();
-        [SerializeField] private bool _showHud = true;
+        [SerializeField, FormerlySerializedAs("_showHud")]
+        private bool _legacyGameplayGuiEnabled = true;
         [Header("Camera")]
         [SerializeField, Range(1f, 89f)] private float _cameraPitchDegrees =
             ColorBlockEscapeBoardCamera.DefaultPitchDegrees;
@@ -53,21 +55,42 @@ namespace ColorBlockEscape.Runtime
         private ColorBlockEscapeChipperSettings _activeChipperSettings;
         private string _statusMessage = "Waiting for level data.";
         private int _selectedLevelIndex = -1;
+        private bool _boardPointerInputSuspended;
+        private bool _hasPublishedSession;
+        private GameState _lastPublishedOutcome = GameState.NotStarted;
+        private bool _lastPublishedResultVisibility;
 
         public bool IsRunning => _session != null;
         public int LevelCount => _levelAssets?.Length ?? 0;
         public int SelectedLevelIndex => _selectedLevelIndex;
+        public string SelectedLevelDisplayLabel => ResolveDisplayLabel(
+            _sourceDefinition,
+            GetLevelDisplayLabel(_selectedLevelIndex));
         public string StatusMessage => _statusMessage;
         public ColorBlockEscapeRuntimeSession Session => _session;
         public ColorBlockEscapeRuntimeLevel Level => _session?.Level;
         public ColorBlockEscapeOutcomeSession Outcome => _session?.Outcome;
+        public bool HasTimer => _session != null;
+        public float RemainingSeconds => _session?.Outcome.RemainingSeconds ?? 0f;
+        public float TimerWarningThresholdSeconds => _session?.Level.TimerWarningSeconds ?? 0f;
+        public GameState CommittedOutcome => _session?.Outcome.State ?? GameState.NotStarted;
         public PlainBlockDragAdapter DragAdapter => _dragAdapter;
         public ColorBlockEscapeChipperPresenter ChipperPresenter => _chipperPresenter;
         public float CameraPitchDegrees => _cameraPitchDegrees;
+        public bool IsBoardPointerInputSuspended => _boardPointerInputSuspended;
+        public bool LegacyGameplayGuiEnabled
+        {
+            get => _legacyGameplayGuiEnabled;
+            set => _legacyGameplayGuiEnabled = value;
+        }
         public bool IsResultPresentationVisible =>
             _session != null && _session.Outcome.State != GameState.Playing &&
             (_presentationGate?.IsResultVisible ?? true);
         public IReadOnlyDictionary<string, Transform> BlockViews => _blockViews;
+
+        public event Action LevelLoaded;
+        public event Action<GameState> OutcomeChanged;
+        public event Action<bool> ResultVisibilityChanged;
 
         private void Awake()
         {
@@ -100,6 +123,31 @@ namespace ColorBlockEscape.Runtime
             _chipperPresenter?.Advance(Time.deltaTime);
             _presentationGate?.Advance(_session.Outcome.State,
                 _chipperPresenter != null && _chipperPresenter.IsBusy, Time.unscaledDeltaTime);
+            PublishPresentationStateChanges();
+        }
+
+        /// <summary>Returns a stable authored label for one scene-assigned level.</summary>
+        public string GetLevelDisplayLabel(int index)
+        {
+            if (_levelAssets == null || index < 0 || index >= _levelAssets.Length)
+                return string.Empty;
+            TextAsset asset = _levelAssets[index];
+            string fallback = asset != null && !string.IsNullOrWhiteSpace(asset.name)
+                ? asset.name
+                : $"Level {index + 1}";
+            return asset != null && TryReadDefinition(asset, out LevelDefinition definition, out _)
+                ? ResolveDisplayLabel(definition, fallback)
+                : fallback;
+        }
+
+        /// <summary>
+        /// Suspends only player pointer sampling. Timer, accepted exits, chipper presentation,
+        /// and result visibility continue to advance while a modal presentation is open.
+        /// </summary>
+        public void SetBoardPointerInputSuspended(bool suspended)
+        {
+            _boardPointerInputSuspended = suspended;
+            _dragAdapter?.SetPointerInputSuspended(suspended);
         }
 
         /// <summary>Loads and starts one authored JSON asset selected by scene configuration.</summary>
@@ -117,8 +165,13 @@ namespace ColorBlockEscape.Runtime
                 _statusMessage = failure;
                 return false;
             }
-            if (!TryStart(definition)) return false;
+            int previousIndex = _selectedLevelIndex;
             _selectedLevelIndex = index;
+            if (!TryStart(definition))
+            {
+                _selectedLevelIndex = previousIndex;
+                return false;
+            }
             return true;
         }
 
@@ -129,7 +182,7 @@ namespace ColorBlockEscape.Runtime
         public bool TryStart(LevelDefinition definition, Camera sceneCamera = null,
             ModularBoardCellView boardCellPrefab = null,
             ColorBlockEscapeBlockMeshPresentation blockMeshPresentation = null,
-            ExitCaptureSettings exitSettings = null, bool showHud = true,
+            ExitCaptureSettings exitSettings = null, bool? showHud = null,
             ColorBlockEscapeChipperSettings chipperSettings = null)
         {
             if (definition == null)
@@ -153,7 +206,7 @@ namespace ColorBlockEscape.Runtime
             }
             else EnsureOwnedMeshPresentation();
 
-            _showHud = showHud;
+            if (showHud.HasValue) _legacyGameplayGuiEnabled = showHud.Value;
             ExitCaptureSettings requestedSettings = exitSettings ?? CreateExitSettings();
             ColorBlockEscapeChipperSettings requestedChipperSettings =
                 chipperSettings ?? _chipperSettings ?? new ColorBlockEscapeChipperSettings();
@@ -161,6 +214,7 @@ namespace ColorBlockEscape.Runtime
             _sourceDefinition = definition;
             _activeExitSettings = requestedSettings;
             _activeChipperSettings = requestedChipperSettings;
+            PublishSessionLoaded();
             return true;
         }
 
@@ -172,9 +226,11 @@ namespace ColorBlockEscape.Runtime
                 _statusMessage = "No gameplay level is available to restart.";
                 return false;
             }
-            return BuildFresh(_sourceDefinition, _activeExitSettings ?? CreateExitSettings(),
-                _activeChipperSettings ?? _chipperSettings ??
-                new ColorBlockEscapeChipperSettings());
+            if (!BuildFresh(_sourceDefinition, _activeExitSettings ?? CreateExitSettings(),
+                    _activeChipperSettings ?? _chipperSettings ??
+                    new ColorBlockEscapeChipperSettings())) return false;
+            PublishSessionLoaded();
+            return true;
         }
 
         private bool BuildFresh(LevelDefinition definition, ExitCaptureSettings exitSettings,
@@ -198,6 +254,7 @@ namespace ColorBlockEscape.Runtime
             _dragAdapter = _runtimeRoot.AddComponent<PlainBlockDragAdapter>();
             _dragAdapter.Initialize(session.Level, _layout, _camera, _blockViews,
                 exitSettings, session.Outcome);
+            _dragAdapter.SetPointerInputSuspended(_boardPointerInputSuspended);
             _chipperPresenter = _runtimeRoot.AddComponent<ColorBlockEscapeChipperPresenter>();
             _chipperPresenter.Initialize(session.Level, _layout, _blockViews,
                 _blockMeshPresentation.Depth, chipperSettings);
@@ -279,9 +336,46 @@ namespace ColorBlockEscape.Runtime
             return true;
         }
 
+        private static string ResolveDisplayLabel(LevelDefinition definition, string fallback)
+        {
+            string displayName = definition?.Metadata?.DisplayName;
+            return string.IsNullOrWhiteSpace(displayName) ? fallback ?? string.Empty : displayName;
+        }
+
+        private void PublishSessionLoaded()
+        {
+            GameState outcome = CommittedOutcome;
+            bool resultVisible = IsResultPresentationVisible;
+            bool outcomeChanged = !_hasPublishedSession || outcome != _lastPublishedOutcome;
+            bool visibilityChanged = _hasPublishedSession &&
+                                     resultVisible != _lastPublishedResultVisibility;
+            _hasPublishedSession = true;
+            _lastPublishedOutcome = outcome;
+            _lastPublishedResultVisibility = resultVisible;
+
+            LevelLoaded?.Invoke();
+            if (outcomeChanged) OutcomeChanged?.Invoke(outcome);
+            if (visibilityChanged) ResultVisibilityChanged?.Invoke(resultVisible);
+        }
+
+        private void PublishPresentationStateChanges()
+        {
+            if (!_hasPublishedSession) return;
+            GameState outcome = CommittedOutcome;
+            if (outcome != _lastPublishedOutcome)
+            {
+                _lastPublishedOutcome = outcome;
+                OutcomeChanged?.Invoke(outcome);
+            }
+            bool resultVisible = IsResultPresentationVisible;
+            if (resultVisible == _lastPublishedResultVisibility) return;
+            _lastPublishedResultVisibility = resultVisible;
+            ResultVisibilityChanged?.Invoke(resultVisible);
+        }
+
         private void OnGUI()
         {
-            if (!_showHud) return;
+            if (!_legacyGameplayGuiEnabled) return;
             GUILayout.BeginArea(new Rect(12f, 12f, 280f, 150f), GUI.skin.box);
             GUILayout.Label("COLOR BLOCK ESCAPE");
             if (_session == null)
