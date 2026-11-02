@@ -16,7 +16,7 @@ Drop The Man.
 - collision-free alignment before capture, locked player control, and per-exit busy state
 - controlled outward exit movement with progressive logical occupancy release
 - countdown loss, all-blocks-cleared completion, and final-acceptance precedence at an exact tie
-- runtime outcomes independent from exit or future chipper presentation timing
+- runtime outcomes independent from exit or chipper presentation timing
 - JSON payload codec plus validated runtime construction
 - a play-mode level editor built on the shared live framework authoring session
 - modular board meshes reused from DTM with CBE-owned URP materials and validated exit openings
@@ -25,12 +25,15 @@ Drop The Man.
 
 ## Gameplay / Demo
 
+- [Gameplay showcase](https://youtube.com/shorts/NqHJ5-KoL2E?feature=share)
+- [Level editor showcase](https://youtu.be/kO0bnt70fH8)
+
 The standalone gameplay path is ready to run:
 
 1. Open `Assets/Scenes/ColorBlockEscapeGameplay.unity`.
 2. Enter Play Mode.
 3. Drag blocks with the primary mouse button and clear them through their matching exits.
-4. Use the HUD to inspect the timer/result or restart the authored level.
+4. Use the HUD to inspect the timer/result, replay, or choose from the authored level catalog.
 
 To author or change levels, open `Assets/Scenes/ColorBlockEscapeLevelEditor.unity`. Its
 **Play-test authored level** action passes a detached authored snapshot into the same runtime host
@@ -49,7 +52,7 @@ does not include exit admission or outcomes and is not the main gameplay demo.
 | CBE exit capture | Owns color matching, span fit, alignment threshold, corridor clearance, busy exits, capture, and progressive release. |
 | Runtime flow | Uses framework timer/game-state services while CBE owns completion, timeout, and exact-tie precedence. |
 | Level data and construction | Framework transports generic level data; CBE interprets block, exit, color, footprint, and timer payloads. |
-| Presentation | Framework builds modular board cells and generated footprint meshes; CBE chooses exit openings, colors, and visual profiles. |
+| Presentation | Framework builds modular board cells and generated footprint meshes; CBE chooses exit openings, colors, visual profiles, and pooled chipper effects. |
 | Level editor | Shared live authoring core plus CBE-specific block, obstacle, exit, timer, codec, and play-test tools. |
 
 ## Architecture Diagram
@@ -85,7 +88,7 @@ without exposing every repository dependency.
 | pointer projection, sweep, clearance, snap, atomic transfer | free-drag policy and exit capture/alignment policy |
 | generic level envelope and construction context | CBE payload codec, validation, and runtime builder |
 | timer and game-state lifecycle | all-blocks-cleared win, timeout loss, and exact-tie precedence |
-| color identity and modular board planning | block/exit colors, visual openings, future chipper presentation |
+| color identity and modular board planning | block/exit colors, visual openings, and chipper presentation |
 | authoring session, picking, placement, selection, move, rotation, erase | block presets, obstacle policy, exit fields, timer tools, play-test handoff |
 
 The framework never contains CBE nouns or exit rules. CBE consumes package contracts through its
@@ -120,12 +123,15 @@ The editor uses one authoritative live `LevelAuthoringCore` plus CBE-owned block
 | `S` | select exit |
 | `0`–`9` | select a shared color slot |
 | Mouse wheel | cycle block footprint presets while over the board |
+| `R` | rotate the prospective footprint or selected block |
+| `F` | mirror the prospective footprint or selected block |
 | Left click | apply the selected authoring action |
 | Right click | erase in block or exit placement mode |
 
-The HUD also exposes board resize, block recolor and rotation, exit side/start/width/color fields,
-timer settings, JSON save/load, and play-test. Invalidating structural edits are rejected and
-report the content that prevents the change.
+The editor renders a live valid/invalid placement preview and exposes board resize, block recolor,
+rotation and mirroring, exit side/start/width/color fields, timer settings, numbered JSON save/load,
+and play-test. Invalidating structural edits are rejected and report the content that prevents the
+change.
 
 ```mermaid
 flowchart LR
@@ -150,7 +156,7 @@ outcome path.
 2. **Continuous movement uses logical footprints.** Geometry and occupancy decide travel, allowing
    irregular shapes without coupling gameplay to a particular mesh.
 3. **Capture and presentation are separate.** Successful admission locks the gameplay result;
-   future chipper animation cannot decide or reverse it.
+   chipper animation cannot decide or reverse it.
 4. **Occupancy changes are atomic.** Alignment may acquire and release required in-board cells
    safely; strictly outward travel only releases occupancy.
 5. **The editor consumes the shared live session.** CBE did not copy DTM's editor or build a second
@@ -161,9 +167,9 @@ outcome path.
 - Movement and exit collision use board/footprint queries rather than Rigidbody simulation.
 - One drag adapter processes pointer input; block views do not each run an independent gameplay
   `Update` loop.
-- Runtime logic is plain C# and remains independent from DOTween.
-- The planned chipper fragment pool and DOTween scattering presentation are not implemented yet and
-  are not claimed as an optimization.
+- Runtime rules are plain C# and remain independent from DOTween presentation timing.
+- Chipper fragments use a prewarmed bounded pool, while DOTween drives non-physics scatter,
+  rotation, shrink, and fade presentation.
 - No mobile frame-time, allocation, or memory benchmark is published yet.
 
 ## Project Structure
@@ -179,7 +185,8 @@ Assets/
       EditMode/              Movement, construction, capture, outcome, editor
       PlayMode/              Scene movement and authored play-test coverage
   RuntimeAssets/Board/       Reused configured modular board assets
-  Levels/                    Authored standalone gameplay JSON
+  Resources/
+    ColorBlockEscape/Levels/ Numbered authored gameplay JSON catalog
   Scenes/
     ColorBlockEscapeGameplay.unity
     ColorBlockEscapeLevelEditor.unity
@@ -196,7 +203,7 @@ Packages/
 - Unity Input System `1.19.0`
 - Unity Test Framework `1.6.0`
 - Puzzle Framework pinned through Unity Package Manager to a full Git commit SHA
-- DOTween is installed for the later presentation checkpoint; current gameplay does not depend on it
+- DOTween drives chipper presentation; gameplay rules and outcomes do not depend on it
 
 ## Current Status
 
@@ -209,14 +216,16 @@ Completed checkpoints:
 - keyboard-focused authoring workflow and DTM modular-board reuse
 - generated footprint meshes used by editor and runtime block views
 - standalone authored-level gameplay host with HUD and clean restart
+- numbered multi-level discovery, selection, replay, and next-level flow
+- pooled DOTween chipper presentation with result-visibility gating
+- live placement previews plus pre-placement rotation and mirroring
 
 In progress or deferred:
 
-- chipper and fragment-scatter presentation
-- pooling for chipper fragments
-- final UI, tuning, and mobile/device validation
+- final visual tuning and mobile/device validation
 
-The current CBE verification passes **39/39 Edit Mode tests** and **6/6 Play Mode tests**.
+Focused Edit Mode and Play Mode coverage exercises movement, capture, outcomes, authoring,
+multi-level loading, UI presentation gating, and scene composition.
 
 ## What I Built / Role
 
