@@ -19,7 +19,8 @@ namespace ColorBlockEscape.Editor
     public static class ColorBlockEscapeGameplaySceneGenerator
     {
         public const string ScenePath = "Assets/Scenes/ColorBlockEscapeGameplay.unity";
-        public const string LevelPath = "Assets/Levels/Level01.json";
+        public const string LevelPath =
+            "Assets/Resources/ColorBlockEscape/Levels/level_1.json";
         public const string FontAssetPath =
             "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
         private const string CanvasName = "Color Block Escape Canvas";
@@ -56,6 +57,9 @@ namespace ColorBlockEscape.Editor
             SerializedProperty levels = serialized.FindProperty("_levelAssets");
             levels.arraySize = 1;
             levels.GetArrayElementAtIndex(0).objectReferenceValue = levelAsset;
+            serialized.FindProperty("_useResourcesLevelCatalog").boolValue = true;
+            serialized.FindProperty("_resourcesLevelCatalogPath").stringValue =
+                ColorBlockEscapeRuntimeController.DefaultResourcesLevelCatalogPath;
             serialized.FindProperty("_startingLevelIndex").intValue = 0;
             serialized.FindProperty("_boardCellPrefab").objectReferenceValue = boardPrefab;
             serialized.FindProperty("_legacyGameplayGuiEnabled").boolValue = false;
@@ -132,7 +136,7 @@ namespace ColorBlockEscape.Editor
             Anchor(hud.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(-64f, 108f));
             TMP_Text levelLabel = CreateText("Level Label", hud.transform, font,
-                "Level 01", 36f, TextAlignmentOptions.MidlineLeft, ink);
+                "Level 1", 36f, TextAlignmentOptions.MidlineLeft, ink);
             Stretch(levelLabel.rectTransform, new Vector2(0f, 0f), new Vector2(0.38f, 1f),
                 new Vector2(30f, 8f), new Vector2(-8f, -8f));
 
@@ -178,7 +182,7 @@ namespace ColorBlockEscape.Editor
                 new Vector2(42f, 42f), new Vector2(-42f, -150f));
             Image viewport = CreateImage("Viewport", scrollObject.transform, Color.clear);
             viewport.raycastTarget = true;
-            viewport.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+            viewport.gameObject.AddComponent<RectMask2D>();
             Stretch(viewport.rectTransform, Vector2.zero, Vector2.one,
                 new Vector2(16f, 16f), new Vector2(-16f, -16f));
             GameObject contentObject = CreateUiObject("Content", viewport.transform);
@@ -378,7 +382,7 @@ namespace ColorBlockEscape.Editor
         {
             Directory.CreateDirectory(Path.GetDirectoryName(LevelPath));
             ColorBlockEscapeAuthoringSession authored = new(6, 6);
-            authored.Core.SetMetadata("cbe-level-01", "Level 01", 1);
+            Require(authored.SetLevelNumber(1));
             Require(authored.SetTimer(90f, 10f));
             Require(authored.SetCell(new GridCoordinate(3, 2), AuthoredCellState.Blocked));
             Require(authored.PlaceBlock("red-bar", new GridCoordinate(2, 4),

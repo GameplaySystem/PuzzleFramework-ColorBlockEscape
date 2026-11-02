@@ -181,6 +181,23 @@ namespace ColorBlockEscape.Runtime.Authoring
         public static Color Tint(ColorIdentity color) =>
             Palette[Mathf.Clamp((int)color - (int)ColorIdentity.Slot0, 0, 9)];
 
+        /// <summary>Renders the exact prospective footprint above the board before placement.</summary>
+        public static void BuildBlockPreview(GridCoordinate origin,
+            IReadOnlyList<GridCoordinate> offsets, ColorIdentity color, bool valid,
+            GridWorldLayout layout, Transform root,
+            ColorBlockEscapeBlockMeshPresentation blockMeshPresentation)
+        {
+            Color body = valid
+                ? Color.Lerp(Tint(color), Color.white, 0.18f)
+                : new Color(0.96f, 0.16f, 0.14f);
+            Color edge = valid
+                ? blockMeshPresentation.EdgeColor
+                : new Color(0.35f, 0.015f, 0.01f);
+            Transform preview = BlockView("Block candidate", origin, offsets, color,
+                layout, root, blockMeshPresentation, body, edge);
+            preview.position += ColorBlockEscapeBoardSpace.Up(layout) * 0.035f;
+        }
+
         /// <summary>Shows every proposed opening segment, including invalid width overflow.</summary>
         public static void BuildExitPreview(ExitSide side, GridCoordinate start, int width,
             ColorIdentity color, bool valid, GridWorldLayout layout, Transform root)
@@ -207,7 +224,8 @@ namespace ColorBlockEscape.Runtime.Authoring
         private static Transform BlockView(string id, GridCoordinate origin,
             IReadOnlyList<GridCoordinate> offsets, ColorIdentity color,
             GridWorldLayout layout, Transform parent,
-            ColorBlockEscapeBlockMeshPresentation blockMeshPresentation)
+            ColorBlockEscapeBlockMeshPresentation blockMeshPresentation,
+            Color? bodyOverride = null, Color? edgeOverride = null)
         {
             GameObject block = new(id);
             block.transform.SetParent(parent, false);
@@ -222,7 +240,7 @@ namespace ColorBlockEscape.Runtime.Authoring
                 Debug.LogWarning(
                     $"Block '{id}' uses fallback cells because unified mesh generation failed: " +
                     generated.FailureReason);
-                Color fallbackTint = Tint(color);
+                Color fallbackTint = bodyOverride ?? Tint(color);
                 float anchorOffset = layout.CellAnchor == GridCellAnchor.Corner ? 0.5f : 0f;
                 for (int i = 0; i < offsets.Count; i++)
                 {
@@ -243,10 +261,10 @@ namespace ColorBlockEscape.Runtime.Authoring
             renderer.sharedMaterials = generated.HasSeparateEdgeSurfaces
                 ? new[]
                 {
-                    MaterialFor(Tint(color)),
-                    MaterialFor(blockMeshPresentation.EdgeColor)
+                    MaterialFor(bodyOverride ?? Tint(color)),
+                    MaterialFor(edgeOverride ?? blockMeshPresentation.EdgeColor)
                 }
-                : new[] { MaterialFor(Tint(color)) };
+                : new[] { MaterialFor(bodyOverride ?? Tint(color)) };
             return block.transform;
         }
 

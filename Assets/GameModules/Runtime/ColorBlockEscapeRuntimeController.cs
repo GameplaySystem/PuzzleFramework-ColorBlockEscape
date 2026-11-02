@@ -17,9 +17,12 @@ namespace ColorBlockEscape.Runtime
     /// </summary>
     public sealed class ColorBlockEscapeRuntimeController : MonoBehaviour
     {
+        public const string DefaultResourcesLevelCatalogPath = "ColorBlockEscape/Levels";
         public const string RuntimeRootName = "Color Block Escape Runtime";
 
         [SerializeField] private TextAsset[] _levelAssets = Array.Empty<TextAsset>();
+        [SerializeField] private bool _useResourcesLevelCatalog = true;
+        [SerializeField] private string _resourcesLevelCatalogPath = DefaultResourcesLevelCatalogPath;
         [SerializeField, Min(0)] private int _startingLevelIndex;
         [SerializeField] private ModularBoardCellView _boardCellPrefab;
         [SerializeField] private ColorBlockEscapeBlockVisualProfile _blockVisualProfile = new();
@@ -43,6 +46,7 @@ namespace ColorBlockEscape.Runtime
             ColorBlockEscapeBoardSpace.CreateLayout(Vector3.zero);
         private Camera _camera;
         private LevelDefinition _sourceDefinition;
+        private TextAsset[] _catalogLevelAssets = Array.Empty<TextAsset>();
         private ColorBlockEscapeRuntimeSession _session;
         private ColorBlockEscapeBlockMeshPresentation _blockMeshPresentation;
         private bool _ownsBlockMeshPresentation;
@@ -61,7 +65,7 @@ namespace ColorBlockEscape.Runtime
         private bool _lastPublishedResultVisibility;
 
         public bool IsRunning => _session != null;
-        public int LevelCount => _levelAssets?.Length ?? 0;
+        public int LevelCount => ActiveLevelAssets.Length;
         public int SelectedLevelIndex => _selectedLevelIndex;
         public string SelectedLevelDisplayLabel => ResolveDisplayLabel(
             _sourceDefinition,
@@ -101,13 +105,15 @@ namespace ColorBlockEscape.Runtime
         private void Start()
         {
             if (IsRunning) return;
-            if (_levelAssets == null || _levelAssets.Length == 0)
+            if (_useResourcesLevelCatalog && !TryLoadResourcesLevelCatalog()) return;
+            TextAsset[] levels = ActiveLevelAssets;
+            if (levels.Length == 0)
             {
-                _statusMessage = "No authored gameplay level is assigned.";
+                _statusMessage = "No authored gameplay levels are available.";
                 Debug.LogError(_statusMessage, this);
                 return;
             }
-            TrySelectLevel(Mathf.Clamp(_startingLevelIndex, 0, _levelAssets.Length - 1));
+            TrySelectLevel(Mathf.Clamp(_startingLevelIndex, 0, levels.Length - 1));
         }
 
         private void OnDestroy()
@@ -126,12 +132,13 @@ namespace ColorBlockEscape.Runtime
             PublishPresentationStateChanges();
         }
 
-        /// <summary>Returns a stable authored label for one scene-assigned level.</summary>
+        /// <summary>Returns a stable authored label for one catalog level.</summary>
         public string GetLevelDisplayLabel(int index)
         {
-            if (_levelAssets == null || index < 0 || index >= _levelAssets.Length)
+            TextAsset[] levels = ActiveLevelAssets;
+            if (index < 0 || index >= levels.Length)
                 return string.Empty;
-            TextAsset asset = _levelAssets[index];
+            TextAsset asset = levels[index];
             string fallback = asset != null && !string.IsNullOrWhiteSpace(asset.name)
                 ? asset.name
                 : $"Level {index + 1}";
@@ -153,13 +160,13 @@ namespace ColorBlockEscape.Runtime
         /// <summary>Loads and starts one authored JSON asset selected by scene configuration.</summary>
         public bool TrySelectLevel(int index)
         {
-            if (_levelAssets == null || index < 0 || index >= _levelAssets.Length ||
-                _levelAssets[index] == null)
+            TextAsset[] levels = ActiveLevelAssets;
+            if (index < 0 || index >= levels.Length || levels[index] == null)
             {
-                _statusMessage = $"Gameplay level index {index} is not assigned.";
+                _statusMessage = $"Gameplay level index {index} is not available.";
                 return false;
             }
-            if (!TryReadDefinition(_levelAssets[index], out LevelDefinition definition,
+            if (!TryReadDefinition(levels[index], out LevelDefinition definition,
                     out string failure))
             {
                 _statusMessage = failure;
@@ -302,6 +309,28 @@ namespace ColorBlockEscape.Runtime
             _blockMeshPresentation = new ColorBlockEscapeBlockMeshPresentation(
                 _blockVisualProfile ?? new ColorBlockEscapeBlockVisualProfile());
             _ownsBlockMeshPresentation = true;
+        }
+
+        private TextAsset[] ActiveLevelAssets =>
+            _useResourcesLevelCatalog ? _catalogLevelAssets : _levelAssets ?? Array.Empty<TextAsset>();
+
+        private bool TryLoadResourcesLevelCatalog()
+        {
+            LevelCatalogBuildResult result = ResourcesLevelCatalogLoader.Load(
+                _resourcesLevelCatalogPath, new ColorBlockEscapeLevelCatalogMetadataReader());
+            if (!result.Success)
+            {
+                _statusMessage = result.FailureReason;
+                Debug.LogError(_statusMessage, this);
+                return false;
+            }
+
+            _catalogLevelAssets = new TextAsset[result.Catalog.Count];
+            for (int index = 0; index < result.Catalog.Count; index++)
+                _catalogLevelAssets[index] = result.Catalog.Entries[index].Asset;
+            for (int index = 0; index < result.Warnings.Count; index++)
+                Debug.LogWarning(result.Warnings[index], this);
+            return true;
         }
 
         private ExitCaptureSettings CreateExitSettings() => new(

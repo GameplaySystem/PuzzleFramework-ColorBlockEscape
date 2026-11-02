@@ -32,10 +32,10 @@ namespace ColorBlockEscape.Tests
                 Object.FindFirstObjectByType<ColorBlockEscapeRuntimeController>();
             Assert.IsNotNull(controller);
             Assert.IsTrue(controller.IsRunning, controller.StatusMessage);
-            Assert.AreEqual(1, controller.LevelCount);
+            Assert.GreaterOrEqual(controller.LevelCount, 1);
             Assert.AreEqual(0, controller.SelectedLevelIndex);
-            Assert.AreEqual("Level 01", controller.GetLevelDisplayLabel(0));
-            Assert.AreEqual("Level 01", controller.SelectedLevelDisplayLabel);
+            Assert.AreEqual("Level 1", controller.GetLevelDisplayLabel(0));
+            Assert.AreEqual("Level 1", controller.SelectedLevelDisplayLabel);
             Assert.IsTrue(controller.HasTimer);
             Assert.AreEqual(10f, controller.TimerWarningThresholdSeconds, 0.0001f);
             Assert.AreEqual(GameState.Playing, controller.CommittedOutcome);
@@ -48,7 +48,7 @@ namespace ColorBlockEscape.Tests
                 Object.FindFirstObjectByType<ColorBlockEscapeCanvasPresenter>();
             Assert.IsNotNull(presenter);
             Assert.AreSame(controller, presenter.Controller);
-            Assert.AreEqual("Level 01", presenter.DisplayedLevelLabel);
+            Assert.AreEqual("Level 1", presenter.DisplayedLevelLabel);
             StringAssert.IsMatch("^[0-9]{2}:[0-9]{2}$", presenter.DisplayedTimer);
             Assert.IsFalse(controller.LegacyGameplayGuiEnabled);
             Assert.IsNotNull(EventSystem.current);
@@ -292,11 +292,33 @@ namespace ColorBlockEscape.Tests
                 "_levelAssets", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.IsNotNull(levelAssets);
             levelAssets.SetValue(controller, new[] { firstAsset, secondAsset });
+            FieldInfo useResources = typeof(ColorBlockEscapeRuntimeController).GetField(
+                "_useResourcesLevelCatalog", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(useResources);
+            useResources.SetValue(controller, false);
             Assert.IsTrue(controller.TrySelectLevel(0), controller.StatusMessage);
 
             presenter.OpenLevelChooser();
             Assert.IsTrue(presenter.IsLevelChooserOpen);
             Assert.AreEqual(2, presenter.LevelButtonCount);
+            Transform chooser = presenter.transform.Find("Level Chooser");
+            Assert.IsNotNull(chooser);
+            Assert.AreEqual(presenter.transform.childCount - 1, chooser.GetSiblingIndex(),
+                "The chooser must render above terminal result panels.");
+            Transform levelContent = chooser.Find("Chooser Panel/Level List/Viewport/Content");
+            Assert.IsNotNull(levelContent);
+            GameObject viewport = levelContent.parent.gameObject;
+            Assert.IsNotNull(viewport.GetComponent<RectMask2D>(),
+                "The level list must use non-stencil rectangular clipping.");
+            Mask legacyStencilMask = viewport.GetComponent<Mask>();
+            Assert.IsTrue(legacyStencilMask == null || !legacyStencilMask.enabled,
+                "The legacy stencil Mask can make cloned level graphics clickable but invisible.");
+            int visibleLevelButtons = 0;
+            for (int childIndex = 0; childIndex < levelContent.childCount; childIndex++)
+                if (levelContent.GetChild(childIndex).gameObject.activeInHierarchy)
+                    visibleLevelButtons++;
+            Assert.AreEqual(2, visibleLevelButtons);
+            Assert.Greater(((RectTransform)levelContent).rect.height, 0f);
             Assert.IsTrue(controller.IsBoardPointerInputSuspended);
             Assert.IsTrue(controller.DragAdapter.IsPointerInputSuspended);
 
@@ -320,6 +342,11 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(presenter.IsWinPanelVisible);
             Assert.IsTrue(presenter.IsNextLevelActionVisible,
                 "Next Level must be available when another assigned level exists.");
+            presenter.OpenLevelChooser();
+            Assert.IsTrue(presenter.IsLevelChooserOpen);
+            Assert.AreEqual(presenter.transform.childCount - 1, chooser.GetSiblingIndex(),
+                "Opening from a result panel must bring the chooser in front of it.");
+            presenter.CloseLevelChooser();
             Assert.IsTrue(presenter.TryNextLevel());
             Assert.AreEqual(1, controller.SelectedLevelIndex);
             Assert.AreEqual("Second Level", presenter.DisplayedLevelLabel);

@@ -7,6 +7,10 @@ using PuzzleFramework.Presentation;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace ColorBlockEscape.Runtime.Authoring
 {
     /// <summary>Dedicated CBE Play-mode scene adapter; framework session and tools own the edits.</summary>
@@ -40,6 +44,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         private int _exitSide;
         private string _duration = "60";
         private string _warning = "10";
+        private string _levelNumber = "1";
         private string _path;
         private string _message = "Choose a tool and click the board.";
         private Vector2 _scroll;
@@ -60,7 +65,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             _blockMeshPresentation = new ColorBlockEscapeBlockMeshPresentation(_blockVisualProfile);
             _camera = Camera.main;
             if (_camera == null) { Debug.LogError("CBE editor needs a Main Camera.", this); return; }
-            _path = System.IO.Path.Combine(Application.persistentDataPath, "color-block-escape-level.json");
+            _path = ColorBlockEscapeLevelNaming.BuildSuggestedProjectRelativePath(1);
             RefreshEditorView();
         }
 
@@ -78,7 +83,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (GUIUtility.keyboardControl == 0)
                 ProcessKeyboardShortcuts();
             if (pointerOverBoard) ProcessShapeScroll(Mouse.current.scroll.ReadValue().y);
-            UpdateExitPreview();
+            UpdatePlacementPreview();
             bool place = Mouse.current.leftButton.wasPressedThisFrame;
             bool erase = Mouse.current.rightButton.wasPressedThisFrame;
             if (!pointerOverBoard || (!place && !erase)) return;
@@ -165,7 +170,22 @@ namespace ColorBlockEscape.Runtime.Authoring
             GUILayout.Label("B Block   M Move/select   O Obstacle toggle");
             GUILayout.Label("E Exit place/edit   S Exit select");
             GUILayout.Label("Left click applies. Right click erases in B/E.");
-            GUILayout.Label("0-9 choose color. Mouse wheel changes block shape.");
+            GUILayout.Label("0-9 color. Wheel shape. R rotate. F mirror.");
+
+            GUILayout.Space(8);
+            GUILayout.Label("Level number");
+            string editedLevelNumber = GUILayout.TextField(_levelNumber);
+            if (!string.Equals(editedLevelNumber, _levelNumber, StringComparison.Ordinal))
+            {
+                _levelNumber = editedLevelNumber;
+                if (TryApplyLevelNumber(out int parsedLevelNumber))
+                    _path = ColorBlockEscapeLevelNaming
+                        .BuildSuggestedProjectRelativePath(parsedLevelNumber);
+            }
+            GUILayout.Label(ColorBlockEscapeLevelNaming.TryParseLevelNumber(
+                    _levelNumber, out int shownLevelNumber)
+                ? $"Registered as: Level {shownLevelNumber}"
+                : "Enter a positive whole number.");
 
             GUILayout.Space(8);
             GUILayout.Label($"Board {_model.Core.Width} × {_model.Core.Height}");
@@ -187,6 +207,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             {
                 _tools.Shape = (BlockShapePreset)_shapeIndex;
                 _tools.CustomOffsets = null;
+                ClearPreview();
             }
             GUILayout.Label("Optional custom offsets: x,y;x,y");
             _customOffsets = GUILayout.TextField(_customOffsets);
@@ -194,11 +215,25 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (GUILayout.Button("Use custom shape"))
             {
                 if (TryParseOffsets(_customOffsets, out IReadOnlyList<GridCoordinate> offsets))
-                { _tools.CustomOffsets = offsets; _message = "Custom footprint selected."; }
+                {
+                    _tools.CustomOffsets = offsets;
+                    _message = "Custom footprint selected.";
+                    ClearPreview();
+                }
                 else _message = "Use semicolon-separated integer x,y offsets.";
             }
-            if (GUILayout.Button("Use preset")) _tools.CustomOffsets = null;
+            if (GUILayout.Button("Use preset"))
+            {
+                _tools.CustomOffsets = null;
+                ClearPreview();
+            }
             GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Rotate placement (R)")) RotatePlacementFootprint();
+            if (GUILayout.Button("Mirror placement (F)")) MirrorPlacementFootprint();
+            GUILayout.EndHorizontal();
+            GUILayout.Label($"Placement: {_tools.RotationQuarterTurns * 90}°" +
+                            (_tools.IsMirrored ? " + mirrored" : string.Empty));
             GUILayout.BeginHorizontal();
             GUILayout.Label("New shape guard", GUILayout.Width(112));
             _shapeGuard = GUILayout.TextField(_shapeGuard, GUILayout.Width(42));
@@ -218,6 +253,7 @@ namespace ColorBlockEscape.Runtime.Authoring
                 GUILayout.Label($"Selected block: {_model.Core.SelectedItemId}");
                 GUILayout.BeginHorizontal();
                 if (GUILayout.Button("Rotate")) Apply(_model.RotateSelectedBlock());
+                if (GUILayout.Button("Mirror")) Apply(_model.MirrorSelectedBlock());
                 if (GUILayout.Button("Recolor")) Apply(_model.RecolorSelectedBlock(_tools.Color));
                 if (GUILayout.Button("Delete"))
                     Apply(_model.EraseSelectedBlock() ? AuthoringEditResult.Accepted :
@@ -265,20 +301,31 @@ namespace ColorBlockEscape.Runtime.Authoring
             GUILayout.EndHorizontal();
 
             GUILayout.Space(8);
-            GUILayout.Label("Level JSON path");
-            _path = GUILayout.TextField(_path);
+            GUILayout.Label($"Level JSON: {_path}");
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Save"))
             {
-                SaveResult result = _model.Save(_path);
-                _message = result.Success ? $"Saved {_path}" : result.FailureReason;
+                if (TryApplyLevelNumber(out _))
+                {
+                    SaveResult result = _model.Save(
+                        ColorBlockEscapeLevelNaming.ResolveAbsolutePath(_path));
+                    _message = result.Success ? $"Saved {_path}" : result.FailureReason;
+#if UNITY_EDITOR
+                    if (result.Success) AssetDatabase.Refresh();
+#endif
+                }
             }
             if (GUILayout.Button("Load"))
             {
-                if (_model.TryLoad(_path, out string failure))
+                if (!ColorBlockEscapeLevelNaming.TryParseLevelNumber(
+                        _levelNumber, out int requestedLevelNumber))
+                    _message = "Level number must be a positive integer.";
+                else if (_model.TryLoad(ColorBlockEscapeLevelNaming.ResolveAbsolutePath(_path),
+                             out string failure))
                 {
                     _tools = _tools.RebindAfterLoad();
                     SelectMode(_mode);
+                    SyncLevelIdentityFields(requestedLevelNumber);
                     _width = _model.Core.Width.ToString();
                     _height = _model.Core.Height.ToString();
                     _duration = _model.Core.Timer.DurationSeconds.ToString(CultureInfo.InvariantCulture);
@@ -294,9 +341,33 @@ namespace ColorBlockEscape.Runtime.Authoring
             GUILayout.EndArea();
         }
 
+        private bool TryApplyLevelNumber(out int levelNumber)
+        {
+            if (!ColorBlockEscapeLevelNaming.TryParseLevelNumber(
+                    _levelNumber, out levelNumber))
+            {
+                _message = "Level number must be a positive integer.";
+                return false;
+            }
+            AuthoringEditResult result = _model.SetLevelNumber(levelNumber);
+            if (!result.Success) _message = result.Reason;
+            return result.Success;
+        }
+
+        private void SyncLevelIdentityFields(int fallbackLevelNumber)
+        {
+            int levelNumber = ColorBlockEscapeLevelNaming.TryParseCanonicalLabel(
+                _model.Core.Metadata.LevelId, out int loadedLevelNumber)
+                ? loadedLevelNumber
+                : fallbackLevelNumber;
+            _levelNumber = levelNumber.ToString(CultureInfo.InvariantCulture);
+            _path = ColorBlockEscapeLevelNaming.BuildSuggestedProjectRelativePath(levelNumber);
+        }
+
         public bool BeginPlayTest()
         {
             if (IsPlayTesting) return true;
+            if (!TryApplyLevelNumber(out _)) return false;
             if (!_model.TryCreateLevel(out LevelDefinition definition, out string failure))
             { _message = failure; return false; }
             _authoringRoot.SetActive(false);
@@ -456,7 +527,41 @@ namespace ColorBlockEscape.Runtime.Authoring
             _tools.Shape = (BlockShapePreset)_shapeIndex;
             _tools.CustomOffsets = null;
             _message = $"Block shape: {_tools.Shape}.";
+            ClearPreview();
             return true;
+        }
+
+        public bool RotatePlacementFootprint()
+        {
+            _tools.RotatePlacementClockwise();
+            _message = $"Placement rotated to {_tools.RotationQuarterTurns * 90}°.";
+            ClearPreview();
+            return true;
+        }
+
+        public bool MirrorPlacementFootprint()
+        {
+            _tools.TogglePlacementMirror();
+            _message = _tools.IsMirrored
+                ? "Placement footprint mirrored."
+                : "Placement footprint mirror cleared.";
+            ClearPreview();
+            return true;
+        }
+
+        public bool ProcessBlockTransformShortcut(Key key)
+        {
+            if (key != Key.R && key != Key.F) return false;
+            if (_mode == ColorBlockEscapeAuthoringMode.PlaceBlock)
+                return key == Key.R ? RotatePlacementFootprint() : MirrorPlacementFootprint();
+            if (_mode != ColorBlockEscapeAuthoringMode.SelectMoveBlock ||
+                _model.Core.SelectedItemId == null) return false;
+            AuthoringEditResult result = key == Key.R
+                ? _model.RotateSelectedBlock()
+                : _model.MirrorSelectedBlock();
+            Show(result);
+            if (result.Success) RefreshEditorView();
+            return result.Success;
         }
 
         private void ProcessKeyboardShortcuts()
@@ -465,6 +570,9 @@ namespace ColorBlockEscape.Runtime.Authoring
             if (keyboard == null) return;
             foreach (Key key in new[] { Key.B, Key.M, Key.O, Key.E, Key.S })
                 if (keyboard[key].wasPressedThisFrame) { ProcessModeShortcut(key); return; }
+            foreach (Key key in new[] { Key.R, Key.F })
+                if (keyboard[key].wasPressedThisFrame)
+                { ProcessBlockTransformShortcut(key); return; }
             foreach (Key key in new[]
             {
                 Key.Digit0, Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4,
@@ -535,6 +643,47 @@ namespace ColorBlockEscape.Runtime.Authoring
             }
             offsets = parsed;
             return parsed.Count > 0;
+        }
+
+        private void UpdatePlacementPreview()
+        {
+            if (_mode == ColorBlockEscapeAuthoringMode.PlaceBlock)
+            {
+                UpdateBlockPreview();
+                return;
+            }
+            if (_mode == ColorBlockEscapeAuthoringMode.PlaceEditExit)
+            {
+                UpdateExitPreview();
+                return;
+            }
+            ClearPreview();
+        }
+
+        private void UpdateBlockPreview()
+        {
+            if (_authoringRoot == null) { ClearPreview(); return; }
+            Vector2 screen = Mouse.current.position.ReadValue();
+            if (screen.x < InspectorPanelWidth) { ClearPreview(); return; }
+            if (!BoardAuthoringPicker.TryPickCell(_camera.ScreenPointToRay(screen),
+                    _layout, _layout.BoardOrigin, out GridCoordinate cell) ||
+                cell.X < 0 || cell.Y < 0 || cell.X >= _model.Core.Width ||
+                cell.Y >= _model.Core.Height)
+            { ClearPreview(); return; }
+
+            IReadOnlyList<GridCoordinate> offsets = _tools.PlacementOffsets;
+            AuthoringEditResult result = _model.PreviewBlock(cell, offsets);
+            string key = $"block/{cell.X},{cell.Y}/{_tools.Shape}/" +
+                         $"{_tools.RotationQuarterTurns}/{_tools.IsMirrored}/" +
+                         $"{_tools.Color}/{_tools.CustomOffsets?.Count ?? -1}/{result.Success}";
+            if (key == _previewKey) return;
+            ClearPreview();
+            _previewRoot = new GameObject("Block candidate preview");
+            _previewRoot.transform.SetParent(_authoringRoot.transform, false);
+            ColorBlockEscapeAuthoringView.BuildBlockPreview(cell, offsets, _tools.Color,
+                result.Success, _layout, _previewRoot.transform, _blockMeshPresentation);
+            _previewKey = key;
+            _message = result.Success ? "Block fits here." : result.Reason;
         }
 
         private void UpdateExitPreview()

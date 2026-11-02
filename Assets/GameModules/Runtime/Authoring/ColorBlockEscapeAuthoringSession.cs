@@ -17,7 +17,7 @@ namespace ColorBlockEscape.Runtime.Authoring
         public ColorBlockEscapeAuthoringSession(int width = 6, int height = 6)
         {
             Core = new LevelAuthoringCore(width, height);
-            Core.SetMetadata("color-block-escape-level", "Color Block Escape", 1);
+            Core.SetMetadata("Level 1", "Level 1", 1);
             Core.SetTimer(true, TimerMode.Countdown, 60f, 10f);
         }
 
@@ -79,7 +79,32 @@ namespace ColorBlockEscape.Runtime.Authoring
         public AuthoringEditResult RotateSelectedBlock()
         {
             if (Core.SelectedItemId == null) return Reject("Select a block to rotate.");
-            return Core.TryRotateItemClockwise(Core.SelectedItemId);
+            if (!Core.TryGetItem(Core.SelectedItemId, out AuthoredFootprint item))
+                return Reject("The selected block no longer exists.");
+            AuthoringEditResult lastFailure = null;
+            for (int turns = 1; turns <= 3; turns++)
+            {
+                IReadOnlyList<GridCoordinate> offsets =
+                    BlockShapeTransforms.Apply(item.Offsets, turns, false);
+                if (BlockShapeTransforms.AreEquivalent(item.Offsets, offsets)) continue;
+                AuthoredFootprint candidate = new(item.Id, item.Origin, offsets);
+                AuthoringEditResult fit = Core.EvaluatePlacement(candidate);
+                if (!fit.Success) { lastFailure = fit; continue; }
+                return Core.TryPlaceOrMove(candidate);
+            }
+            return lastFailure ?? Reject("This block has no distinct rotation.");
+        }
+
+        public AuthoringEditResult MirrorSelectedBlock()
+        {
+            if (Core.SelectedItemId == null) return Reject("Select a block to mirror.");
+            if (!Core.TryGetItem(Core.SelectedItemId, out AuthoredFootprint item))
+                return Reject("The selected block no longer exists.");
+            IReadOnlyList<GridCoordinate> offsets =
+                BlockShapeTransforms.Apply(item.Offsets, 0, true);
+            if (BlockShapeTransforms.AreEquivalent(item.Offsets, offsets))
+                return Reject("This block is unchanged by mirroring.");
+            return Core.TryPlaceOrMove(new AuthoredFootprint(item.Id, item.Origin, offsets));
         }
 
         public AuthoringEditResult RecolorSelectedBlock(ColorIdentity color)
@@ -161,6 +186,15 @@ namespace ColorBlockEscape.Runtime.Authoring
                 float.IsNaN(warning) || float.IsInfinity(warning))
                 return Reject("Countdown duration must be positive and warning within its range.");
             Core.SetTimer(true, TimerMode.Countdown, duration, warning);
+            return AuthoringEditResult.Accepted;
+        }
+
+        public AuthoringEditResult SetLevelNumber(int levelNumber)
+        {
+            if (levelNumber <= 0)
+                return Reject("Level number must be a positive integer.");
+            string label = ColorBlockEscapeLevelNaming.BuildCanonicalLabel(levelNumber);
+            Core.SetMetadata(label, label, 1);
             return AuthoringEditResult.Accepted;
         }
 

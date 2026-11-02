@@ -1,12 +1,12 @@
 {
     "Metadata": {
-        "LevelId": "cbe-level-01",
-        "DisplayName": "Level 01",
+        "LevelId": "Level 2",
+        "DisplayName": "Level 2",
         "Version": 1
     },
     "FrameworkData": {
         "Board": {
-            "Width": 6,
+            "Width": 5,
             "Height": 6,
             "Cells": [
                 {
@@ -46,13 +46,6 @@
                 },
                 {
                     "Coordinate": {
-                        "X": 5,
-                        "Y": 0
-                    },
-                    "CellState": 1
-                },
-                {
-                    "Coordinate": {
                         "X": 0,
                         "Y": 1
                     },
@@ -88,13 +81,6 @@
                 },
                 {
                     "Coordinate": {
-                        "X": 5,
-                        "Y": 1
-                    },
-                    "CellState": 1
-                },
-                {
-                    "Coordinate": {
                         "X": 0,
                         "Y": 2
                     },
@@ -119,18 +105,11 @@
                         "X": 3,
                         "Y": 2
                     },
-                    "CellState": 2
-                },
-                {
-                    "Coordinate": {
-                        "X": 4,
-                        "Y": 2
-                    },
                     "CellState": 1
                 },
                 {
                     "Coordinate": {
-                        "X": 5,
+                        "X": 4,
                         "Y": 2
                     },
                     "CellState": 1
@@ -172,13 +151,6 @@
                 },
                 {
                     "Coordinate": {
-                        "X": 5,
-                        "Y": 3
-                    },
-                    "CellState": 1
-                },
-                {
-                    "Coordinate": {
                         "X": 0,
                         "Y": 4
                     },
@@ -214,13 +186,6 @@
                 },
                 {
                     "Coordinate": {
-                        "X": 5,
-                        "Y": 4
-                    },
-                    "CellState": 1
-                },
-                {
-                    "Coordinate": {
                         "X": 0,
                         "Y": 5
                     },
@@ -250,13 +215,6 @@
                 {
                     "Coordinate": {
                         "X": 4,
-                        "Y": 5
-                    },
-                    "CellState": 1
-                },
-                {
-                    "Coordinate": {
-                        "X": 5,
                         "Y": 5
                     },
                     "CellState": 1
@@ -266,12 +224,12 @@
         "Timer": {
             "IsEnabled": true,
             "Mode": 0,
-            "DurationSeconds": 90.0,
+            "DurationSeconds": 35.0,
             "WarningThresholdSeconds": 10.0
         }
     },
     "ContentPayload": {
         "ContentTypeId": "color-block-escape.v1",
-        "PayloadJson": "{\n    \"Version\": 1,\n    \"Blocks\": [\n        {\n            \"Id\": \"red-bar\",\n            \"Color\": 1,\n            \"Origin\": {\n                \"X\": 2,\n                \"Y\": 4\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 0\n                }\n            ]\n        },\n        {\n            \"Id\": \"blue-l\",\n            \"Color\": 2,\n            \"Origin\": {\n                \"X\": 0,\n                \"Y\": 1\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 1\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 2\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 0\n                }\n            ]\n        },\n        {\n            \"Id\": \"green-single\",\n            \"Color\": 3,\n            \"Origin\": {\n                \"X\": 5,\n                \"Y\": 4\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                }\n            ]\n        }\n    ],\n    \"Exits\": [\n        {\n            \"Id\": \"red-top\",\n            \"Side\": 0,\n            \"StartCell\": {\n                \"X\": 2,\n                \"Y\": 5\n            },\n            \"Width\": 2,\n            \"Color\": 1\n        },\n        {\n            \"Id\": \"blue-left\",\n            \"Side\": 2,\n            \"StartCell\": {\n                \"X\": 0,\n                \"Y\": 1\n            },\n            \"Width\": 3,\n            \"Color\": 2\n        },\n        {\n            \"Id\": \"green-right\",\n            \"Side\": 3,\n            \"StartCell\": {\n                \"X\": 5,\n                \"Y\": 4\n            },\n            \"Width\": 1,\n            \"Color\": 3\n        }\n    ]\n}"
+        "PayloadJson": "{\n    \"Version\": 1,\n    \"Blocks\": [\n        {\n            \"Id\": \"block-1\",\n            \"Color\": 1,\n            \"Origin\": {\n                \"X\": 1,\n                \"Y\": 2\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 0,\n                    \"Y\": 2\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 1\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 2\n                }\n            ]\n        },\n        {\n            \"Id\": \"block-2\",\n            \"Color\": 4,\n            \"Origin\": {\n                \"X\": 2,\n                \"Y\": 1\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 1,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 1\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 2\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                }\n            ]\n        },\n        {\n            \"Id\": \"block-3\",\n            \"Color\": 2,\n            \"Origin\": {\n                \"X\": 2,\n                \"Y\": 2\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 1\n                }\n            ]\n        }\n    ],\n    \"Exits\": [\n        {\n            \"Id\": \"exit-4\",\n            \"Side\": 0,\n            \"StartCell\": {\n                \"X\": 0,\n                \"Y\": 5\n            },\n            \"Width\": 2,\n            \"Color\": 1\n        },\n        {\n            \"Id\": \"exit-5\",\n            \"Side\": 1,\n            \"StartCell\": {\n                \"X\": 3,\n                \"Y\": 0\n            },\n            \"Width\": 2,\n            \"Color\": 4\n        },\n        {\n            \"Id\": \"exit-6\",\n            \"Side\": 2,\n            \"StartCell\": {\n                \"X\": 0,\n                \"Y\": 2\n            },\n            \"Width\": 2,\n            \"Color\": 2\n        },\n        {\n            \"Id\": \"exit-7\",\n            \"Side\": 3,\n            \"StartCell\": {\n                \"X\": 4,\n                \"Y\": 2\n            },\n            \"Width\": 2,\n            \"Color\": 2\n        }\n    ]\n}"
     }
 }

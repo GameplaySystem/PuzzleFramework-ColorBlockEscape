@@ -1,0 +1,165 @@
+{
+    "Metadata": {
+        "LevelId": "Level 1",
+        "DisplayName": "Level 1",
+        "Version": 1
+    },
+    "FrameworkData": {
+        "Board": {
+            "Width": 4,
+            "Height": 5,
+            "Cells": [
+                {
+                    "Coordinate": {
+                        "X": 0,
+                        "Y": 0
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 1,
+                        "Y": 0
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 2,
+                        "Y": 0
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 3,
+                        "Y": 0
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 0,
+                        "Y": 1
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 1,
+                        "Y": 1
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 2,
+                        "Y": 1
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 3,
+                        "Y": 1
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 0,
+                        "Y": 2
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 1,
+                        "Y": 2
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 2,
+                        "Y": 2
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 3,
+                        "Y": 2
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 0,
+                        "Y": 3
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 1,
+                        "Y": 3
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 2,
+                        "Y": 3
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 3,
+                        "Y": 3
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 0,
+                        "Y": 4
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 1,
+                        "Y": 4
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 2,
+                        "Y": 4
+                    },
+                    "CellState": 1
+                },
+                {
+                    "Coordinate": {
+                        "X": 3,
+                        "Y": 4
+                    },
+                    "CellState": 1
+                }
+            ]
+        },
+        "Timer": {
+            "IsEnabled": true,
+            "Mode": 0,
+            "DurationSeconds": 30.0,
+            "WarningThresholdSeconds": 10.0
+        }
+    },
+    "ContentPayload": {
+        "ContentTypeId": "color-block-escape.v1",
+        "PayloadJson": "{\n    \"Version\": 1,\n    \"Blocks\": [\n        {\n            \"Id\": \"block-2\",\n            \"Color\": 1,\n            \"Origin\": {\n                \"X\": 0,\n                \"Y\": 1\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 1\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 1\n                }\n            ]\n        },\n        {\n            \"Id\": \"block-3\",\n            \"Color\": 6,\n            \"Origin\": {\n                \"X\": 2,\n                \"Y\": 2\n            },\n            \"FootprintOffsets\": [\n                {\n                    \"X\": 0,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 0\n                },\n                {\n                    \"X\": 0,\n                    \"Y\": 1\n                },\n                {\n                    \"X\": 1,\n                    \"Y\": 1\n                }\n            ]\n        }\n    ],\n    \"Exits\": [\n        {\n            \"Id\": \"exit-4\",\n            \"Side\": 1,\n            \"StartCell\": {\n                \"X\": 0,\n                \"Y\": 0\n            },\n            \"Width\": 2,\n            \"Color\": 1\n        },\n        {\n            \"Id\": \"exit-1\",\n            \"Side\": 0,\n            \"StartCell\": {\n                \"X\": 2,\n                \"Y\": 4\n            },\n            \"Width\": 2,\n            \"Color\": 6\n        }\n    ]\n}"
+    }
+}

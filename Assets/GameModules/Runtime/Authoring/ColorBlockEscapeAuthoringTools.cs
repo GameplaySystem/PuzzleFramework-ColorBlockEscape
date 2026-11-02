@@ -44,6 +44,57 @@ namespace ColorBlockEscape.Runtime.Authoring
         }
     }
 
+    /// <summary>
+    /// CBE placement transforms use a normalized lower-left footprint anchor. This keeps
+    /// prospective rotation independent from board fit and avoids negative-offset surprises.
+    /// </summary>
+    public static class BlockShapeTransforms
+    {
+        public static IReadOnlyList<GridCoordinate> Apply(
+            IReadOnlyList<GridCoordinate> offsets, int clockwiseQuarterTurns, bool mirrored)
+        {
+            if (offsets == null || offsets.Count == 0) return Array.Empty<GridCoordinate>();
+            List<GridCoordinate> transformed = new(offsets.Count);
+            foreach (GridCoordinate offset in offsets)
+                transformed.Add(mirrored
+                    ? new GridCoordinate(-offset.X, offset.Y)
+                    : offset);
+            int turns = ((clockwiseQuarterTurns % 4) + 4) % 4;
+            for (int turn = 0; turn < turns; turn++)
+                for (int index = 0; index < transformed.Count; index++)
+                {
+                    GridCoordinate offset = transformed[index];
+                    transformed[index] = new GridCoordinate(offset.Y, -offset.X);
+                }
+            return Normalize(transformed);
+        }
+
+        public static IReadOnlyList<GridCoordinate> Normalize(
+            IReadOnlyList<GridCoordinate> offsets)
+        {
+            if (offsets == null || offsets.Count == 0) return Array.Empty<GridCoordinate>();
+            int minX = int.MaxValue;
+            int minY = int.MaxValue;
+            foreach (GridCoordinate offset in offsets)
+            {
+                minX = Math.Min(minX, offset.X);
+                minY = Math.Min(minY, offset.Y);
+            }
+            List<GridCoordinate> normalized = new(offsets.Count);
+            foreach (GridCoordinate offset in offsets)
+                normalized.Add(new GridCoordinate(offset.X - minX, offset.Y - minY));
+            return normalized;
+        }
+
+        public static bool AreEquivalent(IReadOnlyList<GridCoordinate> left,
+            IReadOnlyList<GridCoordinate> right)
+        {
+            if (left == null || right == null || left.Count != right.Count) return false;
+            HashSet<GridCoordinate> cells = new(left);
+            return cells.SetEquals(right);
+        }
+    }
+
     /// <summary>CBE tool payload and explicit registration over framework target dispatch.</summary>
     public sealed class ColorBlockEscapeAuthoringTools
     {
@@ -75,17 +126,31 @@ namespace ColorBlockEscape.Runtime.Authoring
         public ColorIdentity Color { get; set; } = ColorIdentity.Slot0;
         public int ExitWidth { get; set; } = 1;
         public IReadOnlyList<GridCoordinate> CustomOffsets { get; set; }
+        public int RotationQuarterTurns { get; private set; }
+        public bool IsMirrored { get; private set; }
+        public IReadOnlyList<GridCoordinate> PlacementOffsets => BlockShapeTransforms.Apply(
+            CustomOffsets ?? BlockShapePresets.Get(Shape), RotationQuarterTurns, IsMirrored);
 
         public bool SelectTool(string id) => Host.SelectTool(id);
 
+        public void RotatePlacementClockwise() =>
+            RotationQuarterTurns = (RotationQuarterTurns + 1) % 4;
+
+        public void TogglePlacementMirror() => IsMirrored = !IsMirrored;
+
         /// <summary>Rebinds the tool host after a staged load swaps the authoritative live session.</summary>
-        public ColorBlockEscapeAuthoringTools RebindAfterLoad() => new(_model)
-        { Shape = Shape, Color = Color, ExitWidth = ExitWidth, CustomOffsets = CustomOffsets };
+        public ColorBlockEscapeAuthoringTools RebindAfterLoad()
+        {
+            ColorBlockEscapeAuthoringTools rebound = new(_model)
+            { Shape = Shape, Color = Color, ExitWidth = ExitWidth, CustomOffsets = CustomOffsets };
+            rebound.RotationQuarterTurns = RotationQuarterTurns;
+            rebound.IsMirrored = IsMirrored;
+            return rebound;
+        }
 
         private AuthoringEditResult PlacePreview(AuthoringTarget target)
         {
-            IReadOnlyList<GridCoordinate> offsets = CustomOffsets ?? BlockShapePresets.Get(Shape);
-            return _model.PreviewBlock(target.Cell, offsets);
+            return _model.PreviewBlock(target.Cell, PlacementOffsets);
         }
 
         private AuthoringEditResult PlaceApply(AuthoringTarget target)
@@ -93,7 +158,7 @@ namespace ColorBlockEscape.Runtime.Authoring
             string id;
             do { id = $"block-{_nextId++}"; }
             while (_model.Core.TryGetItem(id, out _) || HasExitId(id));
-            return _model.PlaceBlock(id, target.Cell, CustomOffsets ?? BlockShapePresets.Get(Shape), Color);
+            return _model.PlaceBlock(id, target.Cell, PlacementOffsets, Color);
         }
 
         private AuthoringEditResult SelectPreview(AuthoringTarget target) =>

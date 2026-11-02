@@ -170,12 +170,19 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(model.TryGetBlockColor("block", out ColorIdentity color));
             Assert.AreEqual(ColorIdentity.Slot4, color);
 
-            Assert.IsFalse(model.RotateSelectedBlock().Success);
+            Assert.IsTrue(model.RotateSelectedBlock().Success);
+            Assert.IsTrue(model.Core.TryGetItem("block", out AuthoredFootprint rotated));
+            CollectionAssert.Contains(rotated.Offsets, new GridCoordinate(2, 1));
+            foreach (GridCoordinate offset in rotated.Offsets)
+            {
+                Assert.GreaterOrEqual(offset.X, 0);
+                Assert.GreaterOrEqual(offset.Y, 0);
+            }
             Assert.AreEqual(new GridCoordinate(1, 1), Find(model, "block").Origin);
             Assert.IsFalse(model.MoveSelectedBlock(new GridCoordinate(3, 3)).Success);
             Assert.AreEqual(new GridCoordinate(1, 1), Find(model, "block").Origin);
-            Assert.IsTrue(model.MoveSelectedBlock(new GridCoordinate(2, 0)).Success);
-            Assert.AreEqual(new GridCoordinate(2, 0), Find(model, "block").Origin);
+            Assert.IsTrue(model.MoveSelectedBlock(new GridCoordinate(0, 0)).Success);
+            Assert.AreEqual(new GridCoordinate(0, 0), Find(model, "block").Origin);
             Assert.IsTrue(model.EraseBlockAt(new GridCoordinate(2, 1)));
             Assert.IsFalse(model.Core.TryGetItem("block", out _));
         }
@@ -332,6 +339,70 @@ namespace ColorBlockEscape.Tests
         }
 
         [Test]
+        public void PlacementRotationAndMirrorTransformPreviewAndPlacedFootprint()
+        {
+            ColorBlockEscapeAuthoringSession model = new(5, 5);
+            ColorBlockEscapeAuthoringTools tools = new(model)
+            {
+                Shape = BlockShapePreset.L,
+                Color = ColorIdentity.Slot3
+            };
+            tools.RotatePlacementClockwise();
+            tools.TogglePlacementMirror();
+
+            IReadOnlyList<GridCoordinate> expected = new[]
+            {
+                new GridCoordinate(0, 0), new GridCoordinate(1, 0),
+                new GridCoordinate(2, 0), new GridCoordinate(0, 1)
+            };
+            Assert.AreEqual(1, tools.RotationQuarterTurns);
+            Assert.IsTrue(tools.IsMirrored);
+            Assert.IsTrue(BlockShapeTransforms.AreEquivalent(expected, tools.PlacementOffsets));
+            Assert.IsTrue(tools.Host.Preview(
+                AuthoringTarget.ForCell(new GridCoordinate(1, 1))).Success);
+            Assert.IsTrue(tools.Host.Apply(
+                AuthoringTarget.ForCell(new GridCoordinate(1, 1))).Success);
+            Assert.IsTrue(model.Core.TryGetItem(model.Core.SelectedItemId,
+                out AuthoredFootprint placed));
+            Assert.IsTrue(BlockShapeTransforms.AreEquivalent(expected, placed.Offsets));
+        }
+
+        [Test]
+        public void MirroringPlacedBlockIsAtomicWhenReflectedCellsAreBlocked()
+        {
+            ColorBlockEscapeAuthoringSession model = new(4, 4);
+            Assert.IsTrue(model.PlaceBlock("block", new GridCoordinate(1, 0),
+                BlockShapePresets.Get(BlockShapePreset.L), ColorIdentity.Slot0).Success);
+            Assert.IsTrue(model.SetCell(new GridCoordinate(2, 2),
+                AuthoredCellState.Blocked).Success);
+            IReadOnlyList<GridCoordinate> before = new List<GridCoordinate>(
+                Find(model, "block").Offsets);
+            Assert.IsFalse(model.MirrorSelectedBlock().Success);
+            Assert.IsTrue(BlockShapeTransforms.AreEquivalent(before,
+                Find(model, "block").Offsets));
+        }
+
+        [Test]
+        public void PlacedRotationSkipsBlockedQuarterTurnAndUsesNextValidOrientation()
+        {
+            ColorBlockEscapeAuthoringSession model = new(5, 5);
+            IReadOnlyList<GridCoordinate> original = BlockShapePresets.Get(BlockShapePreset.L);
+            Assert.IsTrue(model.PlaceBlock("block", new GridCoordinate(1, 1),
+                original, ColorIdentity.Slot0).Success);
+            Assert.IsTrue(model.SetCell(new GridCoordinate(3, 2),
+                AuthoredCellState.Blocked).Success);
+
+            IReadOnlyList<GridCoordinate> blockedQuarterTurn =
+                BlockShapeTransforms.Apply(original, 1, false);
+            Assert.IsFalse(model.Core.EvaluatePlacement(new AuthoredFootprint(
+                "block", new GridCoordinate(1, 1), blockedQuarterTurn)).Success);
+            Assert.IsTrue(model.RotateSelectedBlock().Success);
+            Assert.IsTrue(BlockShapeTransforms.AreEquivalent(
+                BlockShapeTransforms.Apply(original, 2, false),
+                Find(model, "block").Offsets));
+        }
+
+        [Test]
         public void SharedBoundaryPickerFindsExteriorEdgeButCbeChecksItsMeaning()
         {
             ColorBlockEscapeAuthoringSession model = new(4, 4);
@@ -345,6 +416,60 @@ namespace ColorBlockEscape.Tests
             Assert.IsTrue(tools.SelectTool("Place / edit exit"));
             Assert.IsTrue(tools.Host.Apply(AuthoringTarget.ForBoundaryEdge(edge)).Success);
             Assert.AreEqual(ExitSide.Top, model.Exits[0].Side);
+        }
+
+        [Test]
+        public void LevelNumberProducesCanonicalMetadataAndSuggestedResourcePath()
+        {
+            ColorBlockEscapeAuthoringSession model = ReadyModel();
+            Assert.IsTrue(model.SetLevelNumber(12).Success);
+            Assert.IsTrue(model.TryCreateLevel(out LevelDefinition definition,
+                out string failure), failure);
+            Assert.AreEqual("Level 12", definition.Metadata.LevelId);
+            Assert.AreEqual("Level 12", definition.Metadata.DisplayName);
+            Assert.AreEqual(
+                "Assets/Resources/ColorBlockEscape/Levels/level_12.json",
+                ColorBlockEscapeLevelNaming.BuildSuggestedProjectRelativePath(12));
+            Assert.IsFalse(model.SetLevelNumber(0).Success);
+        }
+
+        [Test]
+        public void CbeCatalogValidatesCanonicalIdsAndSortsByLevelNumber()
+        {
+            TextAsset levelTen = CreateCatalogAsset(10);
+            TextAsset levelTwo = CreateCatalogAsset(2);
+            try
+            {
+                LevelCatalogBuildResult result = LevelCatalogBuilder.Build(
+                    new[] { levelTen, levelTwo },
+                    new ColorBlockEscapeLevelCatalogMetadataReader());
+                Assert.IsTrue(result.Success, result.FailureReason);
+                Assert.AreEqual(2, result.Catalog.Count);
+                Assert.AreEqual("Level 2", result.Catalog.Entries[0].LevelId);
+                Assert.AreEqual("Level 10", result.Catalog.Entries[1].LevelId);
+
+                LevelDefinition invalid = JsonUtility.FromJson<LevelDefinition>(levelTwo.text);
+                invalid.Metadata.LevelId = "Level 02";
+                TextAsset invalidAsset = new(JsonUtility.ToJson(invalid));
+                Assert.IsFalse(new ColorBlockEscapeLevelCatalogMetadataReader()
+                    .TryReadMetadata(invalidAsset, out _, out _));
+                UnityEngine.Object.DestroyImmediate(invalidAsset);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(levelTen);
+                UnityEngine.Object.DestroyImmediate(levelTwo);
+            }
+        }
+
+        private static TextAsset CreateCatalogAsset(int levelNumber)
+        {
+            ColorBlockEscapeAuthoringSession model = ReadyModel();
+            Assert.IsTrue(model.SetLevelNumber(levelNumber).Success);
+            Assert.IsTrue(model.TryCreateLevel(out LevelDefinition definition,
+                out string failure), failure);
+            return new TextAsset(JsonUtility.ToJson(definition))
+                { name = $"level_{levelNumber}" };
         }
 
         private static ColorBlockEscapeAuthoringSession ReadyModel()

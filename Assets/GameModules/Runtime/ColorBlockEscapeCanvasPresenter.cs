@@ -65,6 +65,7 @@ namespace ColorBlockEscape.Runtime
         {
             if (_controller == null)
                 _controller = FindFirstObjectByType<ColorBlockEscapeRuntimeController>();
+            EnsureLevelListClipping();
             SetPanelActive(_levelChooserPanel, false);
             SetPanelActive(_winPanel, false);
             SetPanelActive(_lossPanel, false);
@@ -108,9 +109,17 @@ namespace ColorBlockEscape.Runtime
         public void OpenLevelChooser()
         {
             if (_controller == null || _levelChooserPanel == null) return;
-            RebuildLevelButtons();
             _controller.SetBoardPointerInputSuspended(true);
             _levelChooserPanel.SetActive(true);
+            _levelChooserPanel.transform.SetAsLastSibling();
+            RebuildLevelButtons();
+            if (_levelButtonContent != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_levelButtonContent);
+                Canvas.ForceUpdateCanvases();
+                ScrollRect scrollRect = _levelButtonContent.GetComponentInParent<ScrollRect>();
+                if (scrollRect != null) scrollRect.verticalNormalizedPosition = 1f;
+            }
         }
 
         public void CloseLevelChooser()
@@ -286,6 +295,16 @@ namespace ColorBlockEscape.Runtime
                 button.gameObject.SetActive(true);
                 _levelButtons.Add(button);
             }
+        }
+
+        private void EnsureLevelListClipping()
+        {
+            if (_levelButtonContent == null || _levelButtonContent.parent == null) return;
+            GameObject viewport = _levelButtonContent.parent.gameObject;
+            Mask stencilMask = viewport.GetComponent<Mask>();
+            if (stencilMask != null) stencilMask.enabled = false;
+            if (viewport.GetComponent<RectMask2D>() == null)
+                viewport.AddComponent<RectMask2D>();
         }
 
         private void RestoreBoardInput()
